@@ -1,8 +1,7 @@
 from jira import JIRA
 import re
 import time
-import os
-import json
+import numpy as np
 
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com", "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com", "mail dot com"]
 
@@ -18,28 +17,33 @@ class Contributor(object):
         """Returns True if the email address is hosted by one of the popular free email providers.
         This value is cached."""
         if self.isVolunteer is None:
-            if self.email in VOLUNTEER_DOMAINS:
-                self.isVolunteer = True
-            else:
+            for domain in VOLUNTEER_DOMAINS:
+                if domain in self.email:
+                    self.isVolunteer = True
+            if self.isVolunteer is None:
+                # Failed to find a volunteer domain in this Contributor's email.
                 self.isVolunteer = False
         return self.isVolunteer
 
 
 class Reporter(Contributor):
     """An issue reporter"""
-    def __init__(self, person):
+    def __init__(self, person, issuesReported = None):
         super().__init__(person)
-        self.issuesReported = 0
+        self.issuesReported = 0 if issuesReported is None else issuesReported
 
 
 def indexReporters(issuePool):
     """Returns a dictionary of Reporters indexed by email address"""
     reporterHash = dict()
     for issue in issuePool:
-        reporter = Reporter(issue.fields.reporter)
+        JIRAreporter = issue.fields.reporter
         # Hash this reporter if not already hashed
-        if reporter.email not in reporterHash:
-            reporterHash[reporter.email] = reporter
+        if JIRAreporter.emailAddress not in reporterHash:
+            reporterHash[JIRAreporter.emailAddress] = Reporter(JIRAreporter, issuesReported=1)
+        # Otherwise, increment issues reported
+        else:
+            reporterHash[JIRAreporter.emailAddress].issuesReported += 1
     print("Hashed " + str(len(reporterHash)) + " reporters.")
     return reporterHash
 
@@ -77,6 +81,16 @@ def getIssues(project):
     issuePool = jira.search_issues('project = ' + project, maxResults=False)
     print('Parsed ' + str(len(issuePool)) + ' issues in ' + str(round(time.time() - scanStartTime, 2)) + ' seconds')
     return issuePool
+
+
+def reportsHistogram(devClass, reporters):
+    """Get a histogram of number of issues reported per person in this class of developers"""
+    volunteerIssuesReported = []
+    for reporter in reporters.values():
+        if reporter.getIsVolunteer():
+            print(reporter.issuesReported)
+            volunteerIssuesReported.append(reporter.issuesReported)
+    print(np.histogram(volunteerIssuesReported))
 
 jira = JIRA('https://issues.apache.org/jira')
 project = "Helix"
