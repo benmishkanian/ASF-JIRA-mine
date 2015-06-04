@@ -1,11 +1,13 @@
 from jira import JIRA
 import re
 import time
+import os
+import json
 
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com", "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com", "mail dot com"]
 
 
-class Contributor:
+class Contributor(object):
     """A person who is involved in ASF Jira in any way"""
     def __init__(self, person):
         self.person = person
@@ -30,7 +32,7 @@ class Reporter(Contributor):
         self.issuesReported = 0
 
 
-def indexReporters():
+def indexReporters(issuePool):
     """Returns a dictionary of Reporters indexed by email address"""
     reporterHash = dict()
     for issue in issuePool:
@@ -67,11 +69,17 @@ def getDomains(contributors):
         domainFile.write(str(domain) + '\n')
     print("Domain list has been written to domains.txt")
 
+
+def getIssues(project):
+    """Get a list of all issues in a project. This can take a long time, and requires internet access."""
+    print("Scanning project " + project + "...")
+    scanStartTime = time.time()
+    issuePool = jira.search_issues('project = ' + project, maxResults=False)
+    print('Parsed ' + str(len(issuePool)) + ' issues in ' + str(round(time.time() - scanStartTime, 2)) + ' seconds')
+    return issuePool
+
 jira = JIRA('https://issues.apache.org/jira')
 project = "Helix"
-print("Scanning project " + project + "...")
-scanStartTime = time.time()
-issuePool = jira.search_issues('project = ' + project, maxResults=False)
-print('Parsed ' + str(len(issuePool)) + ' issues in ' + str(round(time.time() - scanStartTime, 2)) + ' seconds')
-reporters = indexReporters()
+issuePool = getIssues(project)
+reporters = indexReporters(issuePool)
 getDomains(reporters)
