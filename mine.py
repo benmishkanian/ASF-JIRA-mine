@@ -79,7 +79,7 @@ def getIssues(project):
     """Get a list of all issues in a project. This can take a long time, and requires internet access."""
     print("Scanning project " + project + "...")
     scanStartTime = time.time()
-    issuePool = jira.search_issues('project = ' + project, maxResults=False)
+    issuePool = jira.search_issues('project = ' + project, maxResults=100)
     print('Parsed ' + str(len(issuePool)) + ' issues in ' + str(round(time.time() - scanStartTime, 2)) + ' seconds')
     return issuePool
 
@@ -96,5 +96,8 @@ def reportsHistogram(devClass, reporters):
 jira = JIRA('https://issues.apache.org/jira')
 project = "Helix"
 issuePool = getIssues(project)
-reporters = indexReporters(issuePool)
-getDomains(reporters)
+#reporters = indexReporters(issuePool)
+#getDomains(reporters)
+jiradb = JIRADB()
+jiradb.persistIssues(issuePool)
+print(np.histogram([contributor.issuesReported for contributor in jiradb.getContributors()]))

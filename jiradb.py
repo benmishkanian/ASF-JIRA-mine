@@ -52,3 +52,6 @@ class JIRADB(object):
             self.session.add(newIssue)
         self.session.commit()
         print("Done")
+
+    def getContributors(self):
+        return self.session.query(Contributor)
