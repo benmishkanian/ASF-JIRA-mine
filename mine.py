@@ -2,7 +2,8 @@ from jira import JIRA
 import re
 import time
 import numpy as np
-from jiradb import Contributor, Issue, JIRADB
+from jiradb import Contributor, JIRADB
+import pylab as P
 
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com", "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com", "mail dot com"]
 
@@ -95,9 +96,10 @@ def reportsHistogram(devClass, reporters):
 
 jira = JIRA('https://issues.apache.org/jira')
 project = "Helix"
-issuePool = getIssues(project)
+#issuePool = getIssues(project)
 #reporters = indexReporters(issuePool)
 #getDomains(reporters)
 jiradb = JIRADB()
-jiradb.persistIssues(issuePool)
-print(np.histogram([contributor.issuesReported for contributor in jiradb.getContributors()]))
+#jiradb.persistIssues(issuePool)
+P.hist([contributor.issuesReported for contributor in jiradb.getContributors()], histtype='bar', rwidth=0.8)
+P.show()
