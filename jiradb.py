@@ -23,10 +23,12 @@ class Contributor(Base):
     issuesReported = Column(Integer, nullable=False)
 
 class JIRADB(object):
-    def __init__(self):
+    def __init__(self, erase=False):
         engine = create_engine('mysql+mysqlconnector://' + SQL_USER + ':' + SQL_PW + '@' + SQL_HOST + '/' + SQL_DB)
         Session = sessionmaker(bind=engine)
         self.session = Session()
+        if erase:
+            Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
 
     def persistIssues(self, issuePool):
@@ -55,3 +57,4 @@ class JIRADB(object):
 
     def getContributors(self):
         return self.session.query(Contributor)
+
