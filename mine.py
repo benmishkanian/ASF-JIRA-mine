@@ -2,21 +2,21 @@ from jira import JIRA
 import re
 import time
 import numpy as np
-import jiradb
+from jiradb import Contributor, Issue, JIRADB
 
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com", "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com", "mail dot com"]
 
-
+"""
 class Contributor(object):
-    """A person who is involved in ASF Jira in any way"""
+    " ""A person who is involved in ASF Jira in any way" ""
     def __init__(self, person):
         self.person = person
         self.email = person.emailAddress
         self.isVolunteer = None
 
     def getIsVolunteer(self):
-        """Returns True if the email address is hosted by one of the popular free email providers.
-        This value is cached."""
+        " ""Returns True if the email address is hosted by one of the popular free email providers.
+        This value is cached." ""
         if self.isVolunteer is None:
             for domain in VOLUNTEER_DOMAINS:
                 if domain in self.email:
@@ -25,11 +25,11 @@ class Contributor(object):
                 # Failed to find a volunteer domain in this Contributor's email.
                 self.isVolunteer = False
         return self.isVolunteer
-
+"""
 
 class Reporter(Contributor):
     """An issue reporter"""
-    def __init__(self, person, issuesReported = None):
+    def __init__(self, issuesReported = None):
         super().__init__(person)
         self.issuesReported = 0 if issuesReported is None else issuesReported
 

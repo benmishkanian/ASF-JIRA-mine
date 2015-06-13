@@ -20,6 +20,7 @@ class Contributor(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String(64))
     isVolunteer = Column(Boolean, nullable=True)
+    issuesReported = Column(Integer, nullable=False)
 
 class JIRADB(object):
     def __init__(self):
@@ -27,13 +28,6 @@ class JIRADB(object):
         Session = sessionmaker(bind=engine)
         self.session = Session()
         Base.metadata.create_all(engine)
-        """metadata = MetaData()
-        issues = Table('issues', metadata, Column('issue_id', Integer, primary_key=True),
-                       Column('reporter', Integer, ForeignKey("contributors.contributor_id"), nullable=False))
-        contributors = Table('contributors', metadata, Column('contributor_id', Integer, primary_key=True),
-                             Column('email', Boolean, nullable=True))
-        metadata.create_all(engine)
-        conn = engine.connect()"""
 
     def persistIssues(self, issuePool):
         print("Persisting issues...", end='', flush=True)
@@ -46,10 +40,11 @@ class JIRADB(object):
                 for domain in VOLUNTEER_DOMAINS:
                     if domain in thisemail:
                         volunteer = True
-                reporter = Contributor(email=thisemail, isVolunteer=volunteer)
+                reporter = Contributor(email=thisemail, isVolunteer=volunteer, issuesReported=1)
                 self.session.add(reporter)
             elif len(contributorList) == 1:
                 reporter = contributorList[0]
+                reporter.issuesReported += 1
             else:
                 raise RuntimeError("Too many Contributors returned for this email.")
             # Persist issue with this Contributor
