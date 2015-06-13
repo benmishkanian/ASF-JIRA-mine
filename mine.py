@@ -2,6 +2,7 @@ from jira import JIRA
 import re
 import time
 import numpy as np
+import jiradb
 
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com", "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com", "mail dot com"]
 
