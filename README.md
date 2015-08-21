@@ -19,4 +19,4 @@ SQL_PW
 SQL_HOST
 SQL_DB
 ```
-Finally, look in mine.py and change the variable `REFRESH_DB` to `False`
+To enable cached mode, use the command line option -c or --cached.
