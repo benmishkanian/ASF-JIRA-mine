@@ -1,5 +1,6 @@
 import re
 import time
+import argparse
 
 from jira import JIRA
 import pylab as P
@@ -59,17 +60,24 @@ def reportsHistogram(isVolunteer):
     P.ylabel("Frequency")
 
 
+# Parse script arguments
+parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
+parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
+args = parser.parse_args()
 
 jira = JIRA('https://issues.apache.org/jira')
 project = "Helix"
-REFRESH_DB = False
 
-if REFRESH_DB:
+if args.cached:
+    # Get cached data from DB
+    jiradb = JIRADB()
+else:
+    # Get fresh data from API, and store in DB
     issuePool = getIssues(project)
     jiradb = JIRADB(erase=True)
     jiradb.persistIssues(issuePool)
-else:
-    jiradb = JIRADB()
+
+# Write list of domain names of contributors to domains.txt
 contributors = jiradb.getContributors()
 getDomains([contributor.email for contributor in contributors])
 
