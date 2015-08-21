@@ -1,9 +1,11 @@
-from jira import JIRA
 import re
 import time
+
+from jira import JIRA
 import numpy as np
-from jiradb import Contributor, JIRADB
 import pylab as P
+
+from jiradb import JIRADB
 
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com",
                      "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com",
@@ -47,7 +49,7 @@ def getIssues(project):
 
 
 def reportsHistogram(devClass, reporters):
-    """Get a histogram of number of issues reported per person in this class of developers"""
+    """Get a histogram of number of issues reported per person in this class of developers."""
     volunteerIssuesReported = []
     for reporter in reporters.values():
         if reporter.getIsVolunteer():
@@ -68,5 +70,18 @@ else:
     jiradb = JIRADB()
 contributors = jiradb.getContributors()
 getDomains([contributor.email for contributor in contributors])
-P.hist([contributor.issuesReported for contributor in contributors], histtype='bar', rwidth=0.8)
+volunteers = contributors.filter_by(isVolunteer=True)
+print("Generating histogram for " + str(volunteers.count()) + " volunteers")
+P.hist([volunteer.issuesReported for volunteer in volunteers], histtype='bar', rwidth=0.8)
+P.title(project + ": Histogram of issues reported for volunteers")
+P.xlabel("Issues Reported")
+P.ylabel("Frequency")
+P.figure()
+
+employees = contributors.filter_by(isVolunteer=False)
+print("Generating histogram for " + str(employees.count()) + " employees")
+P.hist([employee.issuesReported for employee in employees], histtype='bar', rwidth=0.8)
+P.title(project + ": Histogram of issues reported for employees")
+P.xlabel("Issues Reported")
+P.ylabel("Frequency")
 P.show()

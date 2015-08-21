@@ -1,7 +1,8 @@
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
+
 from config import SQL_USER, SQL_PW, SQL_HOST, SQL_DB
 
 Base = declarative_base()
@@ -24,6 +25,7 @@ class Contributor(Base):
 
 class JIRADB(object):
     def __init__(self, erase=False):
+        """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
         engine = create_engine('mysql+mysqlconnector://' + SQL_USER + ':' + SQL_PW + '@' + SQL_HOST + '/' + SQL_DB)
         Session = sessionmaker(bind=engine)
         self.session = Session()
@@ -32,6 +34,7 @@ class JIRADB(object):
         Base.metadata.create_all(engine)
 
     def persistIssues(self, issuePool):
+        """Persist the JIRA issues in issuePool to the database."""
         print("Persisting issues...", end='', flush=True)
         for issue in issuePool:
             # If contributor is not stored, store them.
@@ -58,3 +61,5 @@ class JIRADB(object):
     def getContributors(self):
         return self.session.query(Contributor)
 
+    def getVolunteers(self):
+        self.getContributors().filter_by(isVolunteer=True)
