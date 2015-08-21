@@ -3,10 +3,7 @@ Mining Apache JIRA to learn how volunteers and paid developers differ in their u
 
 ## Dependencies
 - jira-python
-- numpy
 - pylab
-
-Optional:
 - sqlalchemy
 - mysql-connector
 - MySQL database
