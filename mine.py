@@ -2,7 +2,6 @@ import re
 import time
 
 from jira import JIRA
-import numpy as np
 import pylab as P
 
 from jiradb import JIRADB
@@ -48,14 +47,17 @@ def getIssues(project):
     return issuePool
 
 
-def reportsHistogram(devClass, reporters):
-    """Get a histogram of number of issues reported per person in this class of developers."""
-    volunteerIssuesReported = []
-    for reporter in reporters.values():
-        if reporter.getIsVolunteer():
-            print(reporter.issuesReported)
-            volunteerIssuesReported.append(reporter.issuesReported)
-    print(np.histogram(volunteerIssuesReported))
+def reportsHistogram(isVolunteer):
+    P.figure()
+    """Show a histogram of number of issues reported per person in this class of developers."""
+    contributorsInClass = contributors.filter_by(isVolunteer=isVolunteer)
+    contributorClassString = "volunteers" if isVolunteer else "employees"
+    print("Generating histogram for " + str(contributorsInClass.count()) + " " + contributorClassString)
+    P.hist([contributor.issuesReported for contributor in contributorsInClass], histtype='bar', rwidth=0.8)
+    P.title(project + ": Histogram of issues reported for " + contributorClassString)
+    P.xlabel("Issues Reported")
+    P.ylabel("Frequency")
+
 
 
 jira = JIRA('https://issues.apache.org/jira')
@@ -70,18 +72,8 @@ else:
     jiradb = JIRADB()
 contributors = jiradb.getContributors()
 getDomains([contributor.email for contributor in contributors])
-volunteers = contributors.filter_by(isVolunteer=True)
-print("Generating histogram for " + str(volunteers.count()) + " volunteers")
-P.hist([volunteer.issuesReported for volunteer in volunteers], histtype='bar', rwidth=0.8)
-P.title(project + ": Histogram of issues reported for volunteers")
-P.xlabel("Issues Reported")
-P.ylabel("Frequency")
-P.figure()
 
-employees = contributors.filter_by(isVolunteer=False)
-print("Generating histogram for " + str(employees.count()) + " employees")
-P.hist([employee.issuesReported for employee in employees], histtype='bar', rwidth=0.8)
-P.title(project + ": Histogram of issues reported for employees")
-P.xlabel("Issues Reported")
-P.ylabel("Frequency")
+# Show histograms for reporters
+reportsHistogram(True)
+reportsHistogram(False)
 P.show()
