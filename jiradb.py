@@ -1,7 +1,10 @@
+import time
+
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
+from jira import JIRA
 
 Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com",
@@ -29,14 +32,23 @@ class Contributor(Base):
 
 
 class JIRADB(object):
-    def __init__(self, erase=False):
+    def __init__(self, project, erase=False):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
         engine = create_engine('sqlite:///sqlite.db')
         Session = sessionmaker(bind=engine)
         self.session = Session()
         if erase:
+            jira = JIRA('https://issues.apache.org/jira')
+            print("Scanning project " + project + "...")
+            scanStartTime = time.time()
+            issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+            print('Parsed ' + str(len(issuePool)) + ' issues in ' + str(
+                round(time.time() - scanStartTime, 2)) + ' seconds')
             Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
+            Base.metadata.create_all(engine)
+            self.persistIssues(issuePool)
+        else:
+            Base.metadata.create_all(engine)
 
 
     def persistIssues(self, issuePool):
