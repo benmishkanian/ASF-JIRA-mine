@@ -54,16 +54,9 @@ parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
 parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
 args = parser.parse_args()
 
-
 project = "Helix"
 
-if args.cached:
-    # Get cached data from DB
-    jiradb = JIRADB(project)
-else:
-    # Get fresh data from API, and store in DB
-    jiradb = JIRADB(project, erase=True)
-
+jiradb = JIRADB(project, erase=not args.cached)
 
 # Write list of domain names of contributors to domains.txt
 contributors = jiradb.getContributors()
