@@ -3,8 +3,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 
-from config import SQL_USER, SQL_PW, SQL_HOST, SQL_DB
-
 Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com",
                      "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com",
@@ -31,7 +29,7 @@ class Contributor(Base):
 class JIRADB(object):
     def __init__(self, erase=False):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
-        engine = create_engine('mysql+mysqlconnector://' + SQL_USER + ':' + SQL_PW + '@' + SQL_HOST + '/' + SQL_DB)
+        engine = create_engine('sqlite:///sqlite.db')
         Session = sessionmaker(bind=engine)
         self.session = Session()
         if erase:

@@ -2,21 +2,14 @@
 Mining Apache JIRA to learn how volunteers and paid developers differ in their use of JIRA
 
 ## Dependencies
+- Python 3
 - jira-python
 - pylab
 - sqlalchemy
-- mysql-connector
-- MySQL database
 
 ## Usage
 Run mine.py to collect some data from Apache JIRA.
 
-### Using MySQL to cache data
-In order to avoid repeatedly downloading JIRA data, you can set up a MySQL database to cache it. Create a file called config.py and define the following variables:
-```
-SQL_USER
-SQL_PW
-SQL_HOST
-SQL_DB
-```
-To enable cached mode, use the command line option -c or --cached.
+### Data caching
+When the script is run, all the downloaded JIRA data is stored in a local SQLite db. If you want to perform queries on
+this cached data instead of downloading new data every time, use the command line option -c or --cached.
