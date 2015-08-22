@@ -14,8 +14,9 @@ class Issue(Base):
 
     id = Column(Integer, primary_key=True)
     reporter_id = Column(Integer, ForeignKey("contributors.id"), nullable=False)
-    reporter = relationship("Contributor")
-
+    reporter = relationship("Contributor", foreign_keys=[reporter_id])
+    resolver_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)
+    resolver = relationship("Contributor", foreign_keys=[resolver_id])
 
 class Contributor(Base):
     __tablename__ = 'contributors'
@@ -24,6 +25,7 @@ class Contributor(Base):
     email = Column(String(64))
     isVolunteer = Column(Boolean, nullable=True)
     issuesReported = Column(Integer, nullable=False)
+    issuesResolved = Column(Integer, nullable=False)
 
 
 class JIRADB(object):
@@ -36,30 +38,47 @@ class JIRADB(object):
             Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
 
+
     def persistIssues(self, issuePool):
         """Persist the JIRA issues in issuePool to the database."""
         print("Persisting issues...", end='', flush=True)
         for issue in issuePool:
-            # If contributor is not stored, store them.
-            thisemail = issue.fields.reporter.emailAddress
-            contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == thisemail)]
-            if len(contributorList) == 0:
-                volunteer = False
-                for domain in VOLUNTEER_DOMAINS:
-                    if domain in thisemail:
-                        volunteer = True
-                reporter = Contributor(email=thisemail, isVolunteer=volunteer, issuesReported=1)
-                self.session.add(reporter)
-            elif len(contributorList) == 1:
-                reporter = contributorList[0]
-                reporter.issuesReported += 1
-            else:
-                raise RuntimeError("Too many Contributors returned for this email.")
+            # Get reporter
+            reporterEmail = issue.fields.reporter.emailAddress
+            reporter = self.persistContributor(reporterEmail)
+            reporter.issuesReported += 1
+            # Get resolver
+            resolver = None
+            if issue.fields.status.name == 'Resolved':
+                # Get most recent resolver
+                for event in issue.changelog.histories:
+                    for item in event.items:
+                        if item.field == 'status' and item.toString == 'Resolved':
+                            resolverEmail = event.author.emailAddress
+                assert resolverEmail is not None, "Failed to get email of resolver for resolved issue " + issue
+                resolver = self.persistContributor(resolverEmail)
+                resolver.issuesResolved += 1
             # Persist issue with this Contributor
-            newIssue = Issue(reporter=reporter)
+            newIssue = Issue(reporter=reporter, resolver=resolver)
             self.session.add(newIssue)
         self.session.commit()
         print("Done")
+
+    def persistContributor(self, contributorEmail):
+        """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
+        contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
+        if len(contributorList) == 0:
+            volunteer = False
+            for domain in VOLUNTEER_DOMAINS:
+                if domain in contributorEmail:
+                    volunteer = True
+            contributor = Contributor(email=contributorEmail, isVolunteer=volunteer, issuesReported=0, issuesResolved=0)
+            self.session.add(contributor)
+        elif len(contributorList) == 1:
+            contributor = contributorList[0]
+        else:
+            raise RuntimeError("Too many Contributors returned for this email.")
+        return contributor
 
     def getContributors(self):
         return self.session.query(Contributor)
