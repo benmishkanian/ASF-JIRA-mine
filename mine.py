@@ -1,5 +1,6 @@
 import re
 import argparse
+from enum import Enum
 
 import pylab as P
 
@@ -8,6 +9,11 @@ from jiradb import JIRADB
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com",
                      "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com",
                      "mail dot com"]
+
+
+class ContributionType(Enum):
+    REPORT = 0
+    RESOLVE = 1
 
 
 def getDomains(emailList):
@@ -37,15 +43,22 @@ def getDomains(emailList):
     print("Domain list has been written to domains.txt")
 
 
-def reportsHistogram(isVolunteer):
+def drawContributionHistogram(contributionType, isVolunteer):
     P.figure()
-    """Show a histogram of number of issues reported per person in this class of developers."""
+    """Show a histogram of contributionType per person in this class of developers."""
     contributorsInClass = contributors.filter_by(isVolunteer=isVolunteer)
     contributorClassString = "volunteers" if isVolunteer else "employees"
     print("Generating histogram for " + str(contributorsInClass.count()) + " " + contributorClassString)
-    P.hist([contributor.issuesReported for contributor in contributorsInClass], rwidth=0.8)
-    P.title(project + ": Histogram of issues reported for " + contributorClassString)
-    P.xlabel("Issues Reported")
+    if contributionType == ContributionType.REPORT:
+        P.hist([contributor.issuesReported for contributor in contributorsInClass], rwidth=0.8)
+        contributionTypeString = "reported"
+    elif contributionType == ContributionType.RESOLVE:
+        P.hist([contributor.issuesResolved for contributor in contributorsInClass], rwidth=0.8)
+        contributionTypeString = "resolved"
+    else:
+        raise RuntimeError("Unknown contribution type '{}'".format(contributionType))
+    P.title("{}: Histogram of issues {} for {}".format(project, contributionTypeString, contributorClassString))
+    P.xlabel("Issues {}".format(contributionTypeString))
     P.ylabel("Frequency")
 
 
@@ -62,10 +75,13 @@ jiradb = JIRADB(project, erase=not args.cached)
 contributors = jiradb.getContributors()
 getDomains([contributor.email for contributor in contributors])
 
-# Show histograms for reporters
-reportsHistogram(True)
-reportsHistogram(False)
+# Draw histograms for reporters
+drawContributionHistogram(ContributionType.REPORT, True)
+drawContributionHistogram(ContributionType.REPORT, False)
 
-# Show histograms for resolvers
+# Draw histograms for resolvers
+drawContributionHistogram(ContributionType.RESOLVE, True)
+drawContributionHistogram(ContributionType.RESOLVE, False)
 
+# Show histograms
 P.show()
