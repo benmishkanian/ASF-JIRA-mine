@@ -43,7 +43,7 @@ def reportsHistogram(isVolunteer):
     contributorsInClass = contributors.filter_by(isVolunteer=isVolunteer)
     contributorClassString = "volunteers" if isVolunteer else "employees"
     print("Generating histogram for " + str(contributorsInClass.count()) + " " + contributorClassString)
-    P.hist([contributor.issuesReported for contributor in contributorsInClass], histtype='bar', rwidth=0.8)
+    P.hist([contributor.issuesReported for contributor in contributorsInClass], rwidth=0.8)
     P.title(project + ": Histogram of issues reported for " + contributorClassString)
     P.xlabel("Issues Reported")
     P.ylabel("Frequency")
@@ -65,4 +65,7 @@ getDomains([contributor.email for contributor in contributors])
 # Show histograms for reporters
 reportsHistogram(True)
 reportsHistogram(False)
+
+# Show histograms for resolvers
+
 P.show()

@@ -21,6 +21,7 @@ class Issue(Base):
     resolver_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)
     resolver = relationship("Contributor", foreign_keys=[resolver_id])
 
+
 class Contributor(Base):
     __tablename__ = 'contributors'
 
@@ -49,7 +50,6 @@ class JIRADB(object):
             self.persistIssues(issuePool)
         else:
             Base.metadata.create_all(engine)
-
 
     def persistIssues(self, issuePool):
         """Persist the JIRA issues in issuePool to the database."""
