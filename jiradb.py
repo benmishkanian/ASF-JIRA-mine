@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from jira import JIRA
 
+log = logging.getLogger('jiradb')
 Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com",
                      "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com",
@@ -41,20 +42,20 @@ class JIRADB(object):
         self.session = Session()
         if erase:
             jira = JIRA('https://issues.apache.org/jira')
-            logging.info("Scanning project %s...", project)
+            log.info("Scanning project %s...", project)
             scanStartTime = time.time()
             issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
-            logging.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
+            log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
             Base.metadata.drop_all(engine)
             Base.metadata.create_all(engine)
             self.persistIssues(issuePool)
         else:
             Base.metadata.create_all(engine)
-        logging.info("Loaded DB for project %s", project)
+        log.info("Loaded DB for project %s", project)
 
     def persistIssues(self, issuePool):
         """Persist the JIRA issues in issuePool to the database."""
-        print("Persisting issues...", end='', flush=True)
+        log.info("Persisting issues...")
         for issue in issuePool:
             # Get reporter
             reporterEmail = issue.fields.reporter.emailAddress
@@ -75,7 +76,6 @@ class JIRADB(object):
             newIssue = Issue(reporter=reporter, resolver=resolver)
             self.session.add(newIssue)
         self.session.commit()
-        print("Done")
 
     def persistContributor(self, contributorEmail):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
@@ -98,3 +98,19 @@ class JIRADB(object):
 
     def getVolunteers(self):
         self.getContributors().filter_by(isVolunteer=True)
+
+
+if __name__ == "__main__":
+    log.setLevel(logging.INFO)
+    # Add console log handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(logging.Formatter('%(message)s'))
+    log.addHandler(ch)
+    # Add file log handler
+    fh = logging.FileHandler('jiradb.log')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
+    log.addHandler(fh)
+    project = "Helix"
+    jiradb = JIRADB(project, erase=True)
