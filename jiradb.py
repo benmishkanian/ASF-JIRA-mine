@@ -1,4 +1,5 @@
 import time
+import logging
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
@@ -40,16 +41,16 @@ class JIRADB(object):
         self.session = Session()
         if erase:
             jira = JIRA('https://issues.apache.org/jira')
-            print("Scanning project " + project + "...")
+            logging.info("Scanning project %s...", project)
             scanStartTime = time.time()
             issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
-            print('Parsed ' + str(len(issuePool)) + ' issues in ' + str(
-                round(time.time() - scanStartTime, 2)) + ' seconds')
+            logging.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
             Base.metadata.drop_all(engine)
             Base.metadata.create_all(engine)
             self.persistIssues(issuePool)
         else:
             Base.metadata.create_all(engine)
+        logging.info("Loaded DB for project %s", project)
 
     def persistIssues(self, issuePool):
         """Persist the JIRA issues in issuePool to the database."""
