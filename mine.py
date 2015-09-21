@@ -69,7 +69,11 @@ args = parser.parse_args()
 
 project = "Helix"
 
-jiradb = JIRADB(project, erase=not args.cached)
+jiradb = JIRADB()
+if not args.cached:
+    print("Refreshing JIRA database...", end='', flush=True)
+    jiradb.persistIssues(project)
+    print("Done")
 
 # Write list of domain names of contributors to domains.txt
 contributors = jiradb.getContributors()

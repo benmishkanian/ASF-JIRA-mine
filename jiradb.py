@@ -35,26 +35,23 @@ class Contributor(Base):
 
 
 class JIRADB(object):
-    def __init__(self, project, erase=False):
+    def __init__(self):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
-        engine = create_engine('sqlite:///sqlite.db')
-        Session = sessionmaker(bind=engine)
+        self.engine = create_engine('sqlite:///sqlite.db')
+        Session = sessionmaker(bind=self.engine)
         self.session = Session()
-        if erase:
-            jira = JIRA('https://issues.apache.org/jira')
-            log.info("Scanning project %s...", project)
-            scanStartTime = time.time()
-            issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
-            log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
-            Base.metadata.drop_all(engine)
-            Base.metadata.create_all(engine)
-            self.persistIssues(issuePool)
-        else:
-            Base.metadata.create_all(engine)
-        log.info("Loaded DB for project %s", project)
+        Base.metadata.create_all(self.engine)
 
-    def persistIssues(self, issuePool):
-        """Persist the JIRA issues in issuePool to the database."""
+    def persistIssues(self, project):
+        """Replace the DB data with fresh data"""
+        # Refresh declarative schema
+        Base.metadata.drop_all(self.engine)
+        Base.metadata.create_all(self.engine)
+        log.info("Scanning project %s...", project)
+        scanStartTime = time.time()
+        jira = JIRA('https://issues.apache.org/jira')
+        issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+        log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
         log.info("Persisting issues...")
         for issue in issuePool:
             # Get reporter
@@ -76,6 +73,7 @@ class JIRADB(object):
             newIssue = Issue(reporter=reporter, resolver=resolver)
             self.session.add(newIssue)
         self.session.commit()
+        log.info("Refreshed DB for project %s", project)
 
     def persistContributor(self, contributorEmail):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
@@ -113,4 +111,5 @@ if __name__ == "__main__":
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
     project = "Helix"
-    jiradb = JIRADB(project, erase=True)
+    jiradb = JIRADB()
+    jiradb.persistIssues(project)
