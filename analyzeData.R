@@ -18,11 +18,23 @@ analyzeData <- function() {
     dbConnection <- dbConnect(SQLite(), "sqlite.db")
     
     contributors <- dbGetQuery(dbConnection, "select * from contributors")
-    cols <- c("issuesReported", "issuesResolved")
-    print("summary for volunteers")
-    print(summary(contributors[contributors$isVolunteer==1, cols]))
-    print("summary for employees")
-    print(summary(contributors[contributors$isVolunteer==0, cols]))
+    summaryCols <- c("issuesReported", "issuesResolved")
+    volunteers <- contributors[contributors$isVolunteer==1, summaryCols]
+    employees <- contributors[contributors$isVolunteer==0, summaryCols]
+    print("summary for volunteers:")
+    print(summary(volunteers))
+    print(paste("sd: ", sd(volunteers[,"issuesReported"]), "sd: ", sd(volunteers[,"issuesResolved"])))
+    topTableCols <- c("email", "issuesReported", "issuesResolved")
+    print("Top 10 reporters:")
+    print(contributors[contributors$isVolunteer==1, topTableCols][order(volunteers$issuesReported, decreasing = TRUE)[1:10],])
+    print("Top 10 resolvers:")
+    print(contributors[contributors$isVolunteer==1, topTableCols][order(volunteers$issuesResolved, decreasing = TRUE)[1:10],])
+    print(paste(replicate(80,"-"), collapse=""))
+    print("summary for employees:")
+    print(summary(employees))
+    print(paste("sd: ", sd(employees[,"issuesReported"]), "sd: ", sd(volunteers[,"issuesResolved"])))
     
     invisible(dbDisconnect(dbConnection))
 }
+
+analyzeData()
