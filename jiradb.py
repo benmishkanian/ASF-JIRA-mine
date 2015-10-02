@@ -22,6 +22,7 @@ class Issue(Base):
     reporter = relationship("Contributor", foreign_keys=[reporter_id])
     resolver_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)
     resolver = relationship("Contributor", foreign_keys=[resolver_id])
+    currentPriority = Column(String(16), nullable=False)
 
 
 class Contributor(Base):
@@ -69,8 +70,10 @@ class JIRADB(object):
                 assert resolverEmail is not None, "Failed to get email of resolver for resolved issue " + issue
                 resolver = self.persistContributor(resolverEmail)
                 resolver.issuesResolved += 1
+            # Get priority
+            currentPriority = issue.fields.priority.name
             # Persist issue with this Contributor
-            newIssue = Issue(reporter=reporter, resolver=resolver)
+            newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority)
             self.session.add(newIssue)
         self.session.commit()
         log.info("Refreshed DB for project %s", project)
