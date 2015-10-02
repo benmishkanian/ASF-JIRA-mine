@@ -17,6 +17,9 @@ getSummary <- function(isVolunteer) {
 analyzeData <- function() {
     dbConnection <- dbConnect(SQLite(), "sqlite.db")
     
+    reportedByVolunteer <- dbGetQuery(dbConnection, "select contributors.isVolunteer as reportedByVolunteer from issues inner join contributors on issues.reporter_id=contributors.id")
+    volunteerReportCount <- length(reportedByVolunteer[reportedByVolunteer == 1])
+    print(paste("Volunteers reported ", volunteerReportCount, " issues"))
     contributors <- dbGetQuery(dbConnection, "select * from contributors")
     summaryCols <- c("issuesReported", "issuesResolved")
     volunteers <- contributors[contributors$isVolunteer==1, summaryCols]
