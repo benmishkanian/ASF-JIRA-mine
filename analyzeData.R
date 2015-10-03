@@ -14,28 +14,32 @@ getSummary <- function(isVolunteer) {
     print(summary(queryDatabase(paste("select * from contributors where isVolunteer=",isVolunteer))[,c("issuesReported", "issuesResolved")]))
 }
 
+
 analyzeData <- function() {
     dbConnection <- dbConnect(SQLite(), "sqlite.db")
     
     reportedByVolunteer <- dbGetQuery(dbConnection, "select contributors.isVolunteer as reportedByVolunteer from issues inner join contributors on issues.reporter_id=contributors.id")
-    volunteerReportCount <- length(reportedByVolunteer[reportedByVolunteer == 1])
-    print(paste("Volunteers reported ", volunteerReportCount, " issues"))
     contributors <- dbGetQuery(dbConnection, "select * from contributors")
     summaryCols <- c("issuesReported", "issuesResolved")
-    volunteers <- contributors[contributors$isVolunteer==1, summaryCols]
-    employees <- contributors[contributors$isVolunteer==0, summaryCols]
-    print("summary for volunteers:")
-    print(summary(volunteers))
-    print(paste("sd: ", sd(volunteers[,"issuesReported"]), "sd: ", sd(volunteers[,"issuesResolved"])))
     topTableCols <- c("email", "issuesReported", "issuesResolved")
-    print("Top 10 reporters:")
-    print(contributors[contributors$isVolunteer==1, topTableCols][order(volunteers$issuesReported, decreasing = TRUE)[1:10],])
-    print("Top 10 resolvers:")
-    print(contributors[contributors$isVolunteer==1, topTableCols][order(volunteers$issuesResolved, decreasing = TRUE)[1:10],])
-    print(paste(replicate(80,"-"), collapse=""))
-    print("summary for employees:")
-    print(summary(employees))
-    print(paste("sd: ", sd(employees[,"issuesReported"]), "sd: ", sd(volunteers[,"issuesResolved"])))
+    
+    showDataFor <- function(contributorClass) {
+        print(paste(replicate(80,"-"), collapse=""))
+        contributorClassName <- if (contributorClass == 0) "employees" else "volunteers"
+        print(paste("Data for ", contributorClassName, ":"))
+        classReportCount <- length(reportedByVolunteer[reportedByVolunteer == contributorClass])
+        print(paste(contributorClassName, " reported ", classReportCount, " issues"))
+        contributorsOfClass <- contributors[contributors$isVolunteer==contributorClass, summaryCols]
+        print(paste("summary for ", contributorClassName, ":"))
+        print(summary(contributorsOfClass))
+        print(paste("sd: ", sd(contributorsOfClass[,"issuesReported"]), "sd: ", sd(contributorsOfClass[,"issuesResolved"])))
+        print("Top 10 reporters:")
+        print(contributors[contributors$isVolunteer==contributorClass, topTableCols][order(contributorsOfClass$issuesReported, decreasing = TRUE)[1:10],])
+        print("Top 10 resolvers:")
+        print(contributors[contributors$isVolunteer==contributorClass, topTableCols][order(contributorsOfClass$issuesResolved, decreasing = TRUE)[1:10],])
+    }
+    
+    lapply(c(0,1), showDataFor)
     
     invisible(dbDisconnect(dbConnection))
 }
