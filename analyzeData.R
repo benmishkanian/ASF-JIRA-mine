@@ -19,6 +19,8 @@ analyzeData <- function() {
     dbConnection <- dbConnect(SQLite(), "sqlite.db")
     
     reportedByVolunteer <- dbGetQuery(dbConnection, "select contributors.isVolunteer as reportedByVolunteer from issues inner join contributors on issues.reporter_id=contributors.id")
+    resolvedByVolunteer <- dbGetQuery(dbConnection, "select contributors.isVolunteer as resolvedByVolunteer from issues inner join contributors on issues.resolver_id=contributors.id")
+
     contributors <- dbGetQuery(dbConnection, "select * from contributors")
     summaryCols <- c("issuesReported", "issuesResolved")
     topTableCols <- c("email", "issuesReported", "issuesResolved")
@@ -28,7 +30,9 @@ analyzeData <- function() {
         contributorClassName <- if (contributorClass == 0) "employees" else "volunteers"
         print(paste("Data for ", contributorClassName, ":"))
         classReportCount <- length(reportedByVolunteer[reportedByVolunteer == contributorClass])
+        classResolveCount <- length(resolvedByVolunteer[resolvedByVolunteer == contributorClass])
         print(paste(contributorClassName, " reported ", classReportCount, " issues"))
+        print(paste(contributorClassName, " resolved ", classResolveCount, " issues"))
         contributorsOfClass <- contributors[contributors$isVolunteer==contributorClass, summaryCols]
         print(paste("summary for ", contributorClassName, ":"))
         print(summary(contributorsOfClass))
