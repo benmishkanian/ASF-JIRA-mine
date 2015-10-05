@@ -63,7 +63,7 @@ analyzeData <- function() {
     print(priorityTable)
     
     printDivider()
-    print("Current count of resolved issues at each priority level, grouped by resolve classr:")
+    print("Current count of resolved issues at each priority level, grouped by resolver class:")
     priorityResolvedByVolunteerTable <- dbGetQuery(dbConnection, "select issues.currentPriority, contributors.isVolunteer as resolvedByVolunteer from issues inner join contributors on issues.resolver_id=contributors.id")
     getIssueCountByResolvers <- function(priority, resolvedByVolunteer) {
         nrow(priorityResolvedByVolunteerTable[priorityResolvedByVolunteerTable$currentPriority == priority & priorityResolvedByVolunteerTable$resolvedByVolunteer == resolvedByVolunteer,])
