@@ -32,7 +32,7 @@ analyzeData <- function() {
     
     showDataFor <- function(contributorClass) {
         printDivider()
-        contributorClassName <- contributorTypes[contributorClass]
+        contributorClassName <- contributorTypes[contributorClass+1]
         print(paste("Data for ", contributorClassName, ":", sep = ""))
         classReportCount <- length(reportedByVolunteer[reportedByVolunteer == contributorClass])
         classResolveCount <- length(resolvedByVolunteer[resolvedByVolunteer == contributorClass])
