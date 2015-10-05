@@ -32,15 +32,15 @@ analyzeData <- function() {
     showDataFor <- function(contributorClass) {
         printDivider()
         contributorClassName <- if (contributorClass == 0) "employees" else "volunteers"
-        print(paste("Data for ", contributorClassName, ":"))
+        print(paste("Data for ", contributorClassName, ":", sep = ""))
         classReportCount <- length(reportedByVolunteer[reportedByVolunteer == contributorClass])
         classResolveCount <- length(resolvedByVolunteer[resolvedByVolunteer == contributorClass])
-        print(paste(contributorClassName, " reported ", classReportCount, " issues"))
-        print(paste(contributorClassName, " resolved ", classResolveCount, " issues"))
+        print(paste(contributorClassName, "reported", classReportCount, "issues"))
+        print(paste(contributorClassName, "resolved", classResolveCount, "issues"))
         contributorsOfClass <- contributors[contributors$isVolunteer==contributorClass, summaryCols]
-        print(paste("summary for ", contributorClassName, ":"))
+        print(paste("summary for ", contributorClassName, ":", sep = ""))
         print(summary(contributorsOfClass))
-        print(paste("sd: ", sd(contributorsOfClass[,"issuesReported"]), "sd: ", sd(contributorsOfClass[,"issuesResolved"])))
+        print(paste("sd:", sd(contributorsOfClass[,"issuesReported"]), "sd:", sd(contributorsOfClass[,"issuesResolved"])))
         print("Top 10 reporters:")
         print(contributors[contributors$isVolunteer==contributorClass, topTableCols][order(contributorsOfClass$issuesReported, decreasing = TRUE)[1:10],])
         print("Top 10 resolvers:")
