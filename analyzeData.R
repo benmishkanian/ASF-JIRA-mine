@@ -14,6 +14,10 @@ getSummary <- function(isVolunteer) {
     print(summary(queryDatabase(paste("select * from contributors where isVolunteer=",isVolunteer))[,c("issuesReported", "issuesResolved")]))
 }
 
+printDivider <- function() {
+    print(paste(replicate(80,"-"), collapse=""))
+}
+
 
 analyzeData <- function() {
     dbConnection <- dbConnect(SQLite(), "sqlite.db")
@@ -26,7 +30,7 @@ analyzeData <- function() {
     topTableCols <- c("email", "issuesReported", "issuesResolved")
     
     showDataFor <- function(contributorClass) {
-        print(paste(replicate(80,"-"), collapse=""))
+        printDivider()
         contributorClassName <- if (contributorClass == 0) "employees" else "volunteers"
         print(paste("Data for ", contributorClassName, ":"))
         classReportCount <- length(reportedByVolunteer[reportedByVolunteer == contributorClass])
@@ -44,6 +48,18 @@ analyzeData <- function() {
     }
     
     lapply(c(0,1), showDataFor)
+    
+    printDivider()
+    print("Current count of issues at each priority level, classified by reporter:")
+    priorityLevels <- c("Blocker", "Critical", "Major", "Minor", "Trivial")
+    priorityReportedByVolunteerTable <- dbGetQuery(dbConnection, "select issues.currentPriority, contributors.isVolunteer as reportedByVolunteer from issues inner join contributors on issues.reporter_id=contributors.id")
+    getIssueCountByReporters <- function(priority, reportedByVolunteer) {
+        nrow(priorityReportedByVolunteerTable[priorityReportedByVolunteerTable$currentPriority == priority & priorityReportedByVolunteerTable$reportedByVolunteer == reportedByVolunteer,])
+    }
+    priorityTable <- outer(priorityLevels, c(0,1), Vectorize(getIssueCountByReporters))
+    rownames(priorityTable) <- priorityLevels
+    colnames(priorityTable) <- c("employees", "volunteers")
+    print(priorityTable)
     
     invisible(dbDisconnect(dbConnection))
 }
