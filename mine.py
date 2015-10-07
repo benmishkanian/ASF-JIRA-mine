@@ -65,11 +65,12 @@ def drawContributionHistogram(contributionType, isVolunteer):
 # Parse script arguments
 parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
 parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
+parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db', help='The database connection string')
 args = parser.parse_args()
 
 project = "Helix"
 
-jiradb = JIRADB()
+jiradb = JIRADB(dbstring=args.dbstring)
 if not args.cached:
     print("Refreshing JIRA database...", end='', flush=True)
     jiradb.persistIssues(project)

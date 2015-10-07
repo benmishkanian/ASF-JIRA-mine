@@ -36,9 +36,9 @@ class Contributor(Base):
 
 
 class JIRADB(object):
-    def __init__(self):
+    def __init__(self, dbstring='sqlite:///sqlite.db'):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
-        self.engine = create_engine('sqlite:///sqlite.db')
+        self.engine = create_engine(dbstring)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         Base.metadata.create_all(self.engine)
@@ -113,6 +113,13 @@ if __name__ == "__main__":
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
+
+    # Parse script arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
+    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db', help='The database connection string')
+    args = parser.parse_args()
+
     project = "Helix"
     jiradb = JIRADB()
     jiradb.persistIssues(project)
