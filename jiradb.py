@@ -121,5 +121,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     project = "Helix"
-    jiradb = JIRADB()
+    jiradb = JIRADB(dbstring=args.dbstring)
     jiradb.persistIssues(project)
