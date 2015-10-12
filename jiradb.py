@@ -106,6 +106,17 @@ class JIRADB(object):
         self.getContributors().filter_by(isVolunteer=True)
 
 
+def getArguments():
+    # Parse script arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
+    parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
+    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
+                        help='The database connection string')
+    parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     log.setLevel(logging.INFO)
     # Add console log handler
@@ -119,14 +130,6 @@ if __name__ == "__main__":
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
 
-    # Parse script arguments
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
-    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
-                        help='The database connection string')
-    parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
-    args = parser.parse_args()
-
+    args = getArguments()
     jiradb = JIRADB(dbstring=args.dbstring)
     jiradb.persistIssues(args.projects)

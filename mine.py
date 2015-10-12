@@ -1,10 +1,9 @@
 import re
-import argparse
 from enum import Enum
 
 import pylab as P
 
-from jiradb import JIRADB
+from jiradb import JIRADB, getArguments
 
 
 class ContributionType(Enum):
@@ -14,7 +13,7 @@ class ContributionType(Enum):
 
 def getDomains(emailList):
     """Prints to domains.txt the domain names of the emails of a dictionary of Contributors"""
-    emailRegex = re.compile('.+at\s+(\S+\s+dot.+)')
+    emailRegex = re.compile('.+@(\S+)')
     domainHash = dict()
     discardedEmailCount = 0
     # Iterate through Contributors' emails
@@ -39,7 +38,7 @@ def getDomains(emailList):
     print("Domain list has been written to domains.txt")
 
 
-def drawContributionHistogram(contributionType, isVolunteer):
+def drawContributionHistogram(project, contributionType, isVolunteer):
     P.figure()
     """Show a histogram of contributionType per person in this class of developers."""
     contributorsInClass = contributors.filter_by(isVolunteer=isVolunteer)
@@ -58,31 +57,26 @@ def drawContributionHistogram(contributionType, isVolunteer):
     P.ylabel("Frequency")
 
 
-# Parse script arguments
-parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
-parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
-parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db', help='The database connection string')
-args = parser.parse_args()
-
-project = "Helix"
+args = getArguments()
 
 jiradb = JIRADB(dbstring=args.dbstring)
 if not args.cached:
     print("Refreshing JIRA database...", end='', flush=True)
-    jiradb.persistIssues(project)
+    jiradb.persistIssues(args.projects)
     print("Done")
 
 # Write list of domain names of contributors to domains.txt
 contributors = jiradb.getContributors()
 getDomains([contributor.email for contributor in contributors])
 
-# Draw histograms for reporters
-drawContributionHistogram(ContributionType.REPORT, True)
-drawContributionHistogram(ContributionType.REPORT, False)
+for project in args.projects:
+    # Draw histograms for reporters
+    drawContributionHistogram(project, ContributionType.REPORT, True)
+    drawContributionHistogram(project, ContributionType.REPORT, False)
 
-# Draw histograms for resolvers
-drawContributionHistogram(ContributionType.RESOLVE, True)
-drawContributionHistogram(ContributionType.RESOLVE, False)
+    # Draw histograms for resolvers
+    drawContributionHistogram(project, ContributionType.RESOLVE, True)
+    drawContributionHistogram(project, ContributionType.RESOLVE, False)
 
 # Show histograms
 P.show()
