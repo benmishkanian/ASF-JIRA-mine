@@ -35,7 +35,7 @@ class Contributor(Base):
 
 
 class JIRADB(object):
-    def __init__(self, dbstring='sqlite:///sqlite.db'):
+    def __init__(self, dbstring):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
         self.engine = create_engine(dbstring)
         Session = sessionmaker(bind=self.engine)
