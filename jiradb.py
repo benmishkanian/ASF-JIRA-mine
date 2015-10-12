@@ -9,9 +9,8 @@ from jira import JIRA
 
 log = logging.getLogger('jiradb')
 Base = declarative_base()
-VOLUNTEER_DOMAINS = ["hotmail dot com", "apache dot org", "yahoo dot com", "gmail dot com", "aol dot com",
-                     "outlook dot com", "live dot com", "mac dot com", "icloud dot com", "me dot com", "yandex dot com",
-                     "mail dot com"]
+VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
+                     "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
 
 
 class Issue(Base):
@@ -80,8 +79,11 @@ class JIRADB(object):
 
     def persistContributor(self, contributorEmail):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
+        # Convert email format to standard format
+        contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
         if len(contributorList) == 0:
+            # Find out if volunteer
             volunteer = False
             for domain in VOLUNTEER_DOMAINS:
                 if domain in contributorEmail:
@@ -116,8 +118,10 @@ if __name__ == "__main__":
 
     # Parse script arguments
     import argparse
+
     parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
-    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db', help='The database connection string')
+    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
+                        help='The database connection string')
     args = parser.parse_args()
 
     project = "Helix"
