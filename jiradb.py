@@ -22,6 +22,7 @@ class Issue(Base):
     resolver_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)
     resolver = relationship("Contributor", foreign_keys=[resolver_id])
     currentPriority = Column(String(16), nullable=False)
+    project = Column(String(16), nullable=False)
 
 
 class Contributor(Base):
@@ -42,40 +43,42 @@ class JIRADB(object):
         self.session = Session()
         Base.metadata.create_all(self.engine)
 
-    def persistIssues(self, project):
+    def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         # Refresh declarative schema
         Base.metadata.drop_all(self.engine)
         Base.metadata.create_all(self.engine)
-        log.info("Scanning project %s...", project)
-        scanStartTime = time.time()
-        jira = JIRA('https://issues.apache.org/jira')
-        issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
-        log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
-        log.info("Persisting issues...")
-        for issue in issuePool:
-            # Get reporter
-            reporterEmail = issue.fields.reporter.emailAddress
-            reporter = self.persistContributor(reporterEmail)
-            reporter.issuesReported += 1
-            # Get resolver
-            resolver = None
-            if issue.fields.status.name == 'Resolved':
-                # Get most recent resolver
-                for event in issue.changelog.histories:
-                    for item in event.items:
-                        if item.field == 'status' and item.toString == 'Resolved':
-                            resolverEmail = event.author.emailAddress
-                assert resolverEmail is not None, "Failed to get email of resolver for resolved issue " + issue
-                resolver = self.persistContributor(resolverEmail)
-                resolver.issuesResolved += 1
-            # Get priority
-            currentPriority = issue.fields.priority.name
-            # Persist issue with this Contributor
-            newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority)
-            self.session.add(newIssue)
-        self.session.commit()
-        log.info("Refreshed DB for project %s", project)
+        for project in projectList:
+            log.info("Scanning project %s...", project)
+            scanStartTime = time.time()
+            jira = JIRA('https://issues.apache.org/jira')
+            issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+            log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
+            log.info("Persisting issues...")
+            for issue in issuePool:
+                # Get reporter
+                reporterEmail = issue.fields.reporter.emailAddress
+                reporter = self.persistContributor(reporterEmail)
+                reporter.issuesReported += 1
+                # Get resolver
+                resolver = None
+                if issue.fields.status.name == 'Resolved':
+                    # Get most recent resolver
+                    for event in issue.changelog.histories:
+                        for item in event.items:
+                            if item.field == 'status' and item.toString == 'Resolved':
+                                resolverEmail = event.author.emailAddress
+                    assert resolverEmail is not None, "Failed to get email of resolver for resolved issue " + issue
+                    resolver = self.persistContributor(resolverEmail)
+                    resolver.issuesResolved += 1
+                # Get priority
+                currentPriority = issue.fields.priority.name
+                # Persist issue with this Contributor
+                newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority,
+                                 project=issue.fields.project.key)
+                self.session.add(newIssue)
+            self.session.commit()
+            log.info("Refreshed DB for project %s", project)
 
     def persistContributor(self, contributorEmail):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
@@ -122,8 +125,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
     parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
                         help='The database connection string')
+    parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
     args = parser.parse_args()
 
-    project = "Helix"
     jiradb = JIRADB(dbstring=args.dbstring)
-    jiradb.persistIssues(project)
+    jiradb.persistIssues(args.projects)
