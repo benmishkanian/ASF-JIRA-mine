@@ -21,6 +21,7 @@ class Issue(Base):
     reporter = relationship("Contributor", foreign_keys=[reporter_id])
     resolver_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)
     resolver = relationship("Contributor", foreign_keys=[resolver_id])
+    originalPriority = Column(String(16), nullable=False)
     currentPriority = Column(String(16), nullable=False)
     project = Column(String(16), nullable=False)
 
@@ -71,10 +72,18 @@ class JIRADB(object):
                     assert resolverEmail is not None, "Failed to get email of resolver for resolved issue " + issue
                     resolver = self.persistContributor(resolverEmail)
                     resolver.issuesResolved += 1
-                # Get priority
+                # Get current priority
                 currentPriority = issue.fields.priority.name
+                # Get original priority
+                originalPriority = currentPriority
+                for event in issue.changelog.histories:
+                    for item in event.items:
+                        if item.field == 'priority':
+                            originalPriority = item.fromString
+                            break
                 # Persist issue with this Contributor
                 newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority,
+                                 originalPriority=originalPriority,
                                  project=issue.fields.project.key)
                 self.session.add(newIssue)
             self.session.commit()
