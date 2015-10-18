@@ -31,6 +31,7 @@ class Contributor(Base):
 
     id = Column(Integer, primary_key=True)
     username = Column(String(64), nullable=False)
+    displayName = Column(String(64), nullable=False)
     email = Column(String(64), nullable=False)
     isVolunteer = Column(Boolean, nullable=True)
     issuesReported = Column(Integer, nullable=False)
@@ -114,7 +115,8 @@ class JIRADB(object):
             for domain in VOLUNTEER_DOMAINS:
                 if domain in contributorEmail:
                     volunteer = True
-            contributor = Contributor(username=person.name, email=contributorEmail, isVolunteer=volunteer,
+            contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
+                                      isVolunteer=volunteer,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0)
             self.session.add(contributor)
         elif len(contributorList) == 1:
