@@ -1,17 +1,19 @@
 import time
 import logging
+import re
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from jira import JIRA
+import pythonwhois
 
 log = logging.getLogger('jiradb')
 Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
-
+EMAIL_DOMAIN_REGEX = re.compile('.+@(\S+)')
 
 class Issue(Base):
     __tablename__ = 'issues'
@@ -112,9 +114,21 @@ class JIRADB(object):
         if len(contributorList) == 0:
             # Find out if volunteer
             volunteer = False
-            for domain in VOLUNTEER_DOMAINS:
-                if domain in contributorEmail:
+            for volunteerDomain in VOLUNTEER_DOMAINS:
+                if volunteerDomain in contributorEmail:
                     volunteer = True
+            if not volunteer:
+                # Check for personal domain
+                domain = EMAIL_DOMAIN_REGEX.search(contributorEmail).group(1)
+                try:
+                    whoisInfo = pythonwhois.get_whois(domain)
+                    volunteer = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
+                                                                          'admin'] is not None and 'admin' in whoisInfo[
+                        'contacts'] and 'name' in whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
+                                                                                         'name'] is not None and \
+                                whoisInfo['contacts']['admin']['name'].lower() == person.displayName.lower()
+                except pythonwhois.shared.WhoisException as e:
+                    log.warn('Error in WHOIS query for %s: %s', domain, e)
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       isVolunteer=volunteer,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0)
