@@ -30,10 +30,12 @@ class Contributor(Base):
     __tablename__ = 'contributors'
 
     id = Column(Integer, primary_key=True)
-    email = Column(String(64))
+    username = Column(String(64), nullable=False)
+    email = Column(String(64), nullable=False)
     isVolunteer = Column(Boolean, nullable=True)
     issuesReported = Column(Integer, nullable=False)
     issuesResolved = Column(Integer, nullable=False)
+    assignedToCommercialCount = Column(Integer, nullable=False)
 
 
 class JIRADB(object):
@@ -57,39 +59,51 @@ class JIRADB(object):
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
             log.info("Persisting issues...")
             for issue in issuePool:
-                # Get reporter
-                reporterEmail = issue.fields.reporter.emailAddress
-                reporter = self.persistContributor(reporterEmail)
-                reporter.issuesReported += 1
-                # Get resolver
-                resolver = None
-                if issue.fields.status.name == 'Resolved':
-                    # Get most recent resolver
-                    for event in issue.changelog.histories:
-                        for item in event.items:
-                            if item.field == 'status' and item.toString == 'Resolved':
-                                resolverEmail = event.author.emailAddress
-                    assert resolverEmail is not None, "Failed to get email of resolver for resolved issue " + issue
-                    resolver = self.persistContributor(resolverEmail)
-                    resolver.issuesResolved += 1
                 # Get current priority
                 currentPriority = issue.fields.priority.name
-                # Get original priority
+                # Get reporter
+                reporter = self.persistContributor(issue.fields.reporter)
+                reporter.issuesReported += 1
+                # Scan changelog
+                resolver = None
+                foundOriginalPriority = False
                 originalPriority = currentPriority
+                isResolved = issue.fields.status.name == 'Resolved'
                 for event in issue.changelog.histories:
                     for item in event.items:
-                        if item.field == 'priority':
+                        if isResolved and item.field == 'status' and item.toString == 'Resolved':
+                            # Get most recent resolver
+                            resolverJiraObject = event.author
+                        elif not foundOriginalPriority and item.field == 'priority':
+                            # Get original priority
                             originalPriority = item.fromString
-                            break
-                # Persist issue with this Contributor
+                            foundOriginalPriority = True
+                if isResolved:
+                    assert resolverJiraObject is not None, "Failed to get resolver for resolved issue " + issue
+                    resolver = self.persistContributor(resolverJiraObject)
+                    resolver.issuesResolved += 1
+                # Persist issue
                 newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority,
                                  originalPriority=originalPriority,
                                  project=issue.fields.project.key)
                 self.session.add(newIssue)
+            for issue in issuePool:
+                for event in issue.changelog.histories:
+                    for item in event.items:
+                        if item.field == 'assignee':
+                            # Did they assign to a known commercial dev?
+                            contributorList = [c for c in
+                                               self.session.query(Contributor).filter(item.to == Contributor.username)]
+                            assert len(contributorList) < 2, "Too many Contributors returned for username " + item.to
+                            if len(contributorList) == 1 and not contributorList[0].isVolunteer:
+                                # Increment count of times this assigner assigned to a commercial dev
+                                assigner = self.persistContributor(event.author)
+                                assigner.assignedToCommercialCount += 1
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
 
-    def persistContributor(self, contributorEmail):
+    def persistContributor(self, person):
+        contributorEmail = person.emailAddress
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
@@ -100,7 +114,8 @@ class JIRADB(object):
             for domain in VOLUNTEER_DOMAINS:
                 if domain in contributorEmail:
                     volunteer = True
-            contributor = Contributor(email=contributorEmail, isVolunteer=volunteer, issuesReported=0, issuesResolved=0)
+            contributor = Contributor(username=person.name, email=contributorEmail, isVolunteer=volunteer,
+                                      issuesReported=0, issuesResolved=0, assignedToCommercialCount=0)
             self.session.add(contributor)
         elif len(contributorList) == 1:
             contributor = contributorList[0]
