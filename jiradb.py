@@ -126,7 +126,7 @@ class JIRADB(object):
                                                                           'admin'] is not None and 'admin' in whoisInfo[
                         'contacts'] and 'name' in whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
                                                                                          'name'] is not None and \
-                                whoisInfo['contacts']['admin']['name'].lower() == person.displayName.lower()
+                                (whoisInfo['contacts']['admin']['name'].lower() == person.displayName.lower() or 'whoisproxy' in whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
                     log.warn('Error in WHOIS query for %s: %s', domain, e)
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
