@@ -14,6 +14,7 @@ Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
 EMAIL_DOMAIN_REGEX = re.compile('.+@(\S+)')
+LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
 class Issue(Base):
     __tablename__ = 'issues'
@@ -39,6 +40,7 @@ class Contributor(Base):
     issuesReported = Column(Integer, nullable=False)
     issuesResolved = Column(Integer, nullable=False)
     assignedToCommercialCount = Column(Integer, nullable=False)
+    LinkedInPage = Column(String(128), nullable=True)
 
 
 class JIRADB(object):
@@ -48,6 +50,20 @@ class JIRADB(object):
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         Base.metadata.create_all(self.engine)
+        if args.gkeyfile is not None:
+            from simplecrypt import decrypt
+            import getpass
+            from apiclient.discovery import build
+            gpass = getpass.getpass('Enter Google Search key password:')
+            with open(args.gkeyfile, 'rb') as gkeyfilereader:
+                ciphertext = gkeyfilereader.read()
+            searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
+            self.customSearch = searchService.cse()
+
+    def googleSearchLinkedIn(self, query):
+        assert args.gkeyfile is not None, "A Google Custom Search API key is required to use this function."
+        return self.customSearch.list(q=query, cx=LINKEDIN_SEARCH_ID).execute()
+
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -65,7 +81,7 @@ class JIRADB(object):
                 # Get current priority
                 currentPriority = issue.fields.priority.name
                 # Get reporter
-                reporter = self.persistContributor(issue.fields.reporter)
+                reporter = self.persistContributor(issue.fields.reporter, project)
                 reporter.issuesReported += 1
                 # Scan changelog
                 resolver = None
@@ -83,7 +99,7 @@ class JIRADB(object):
                             foundOriginalPriority = True
                 if isResolved:
                     assert resolverJiraObject is not None, "Failed to get resolver for resolved issue " + issue
-                    resolver = self.persistContributor(resolverJiraObject)
+                    resolver = self.persistContributor(resolverJiraObject, project)
                     resolver.issuesResolved += 1
                 # Persist issue
                 newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority,
@@ -100,18 +116,25 @@ class JIRADB(object):
                             assert len(contributorList) < 2, "Too many Contributors returned for username " + item.to
                             if len(contributorList) == 1 and not contributorList[0].isVolunteer:
                                 # Increment count of times this assigner assigned to a commercial dev
-                                assigner = self.persistContributor(event.author)
+                                assigner = self.persistContributor(event.author, project)
                                 assigner.assignedToCommercialCount += 1
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
 
-    def persistContributor(self, person):
+    def persistContributor(self, person, project):
         contributorEmail = person.emailAddress
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
         if len(contributorList) == 0:
+            # Get LinkedIn page
+            try:
+                searchResults = jiradb.googleSearchLinkedIn('{} {}'.format(person.displayName, project))
+                LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
+                                                                        'totalResults'] != '0' else None
+            except Exception as e:
+                log.error('Failed to get LinkedIn URL. Error: %s\nData: %s', e, searchResults)
             # Find out if volunteer
             volunteer = False
             for volunteerDomain in VOLUNTEER_DOMAINS:
@@ -135,7 +158,8 @@ class JIRADB(object):
                     log.warn('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       isVolunteer=volunteer,
-                                      issuesReported=0, issuesResolved=0, assignedToCommercialCount=0)
+                                      issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
+                                      LinkedInPage=LinkedInPage)
             self.session.add(contributor)
         elif len(contributorList) == 1:
             contributor = contributorList[0]
@@ -157,6 +181,8 @@ def getArguments():
     parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
     parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
                         help='The database connection string')
+    parser.add_argument('--gkeyfile', dest='gkeyfile', action='store', required=False,
+                        help='File that contains a Google Custom Search API key enciphered by simple-crypt')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
     return parser.parse_args()
 
