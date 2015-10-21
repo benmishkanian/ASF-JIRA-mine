@@ -16,6 +16,7 @@ VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol
 EMAIL_DOMAIN_REGEX = re.compile('.+@(\S+)')
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
+
 class Issue(Base):
     __tablename__ = 'issues'
 
@@ -63,7 +64,6 @@ class JIRADB(object):
     def googleSearchLinkedIn(self, query):
         assert args.gkeyfile is not None, "A Google Custom Search API key is required to use this function."
         return self.customSearch.list(q=query, cx=LINKEDIN_SEARCH_ID).execute()
-
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -132,7 +132,10 @@ class JIRADB(object):
             try:
                 searchResults = jiradb.googleSearchLinkedIn('{} {}'.format(person.displayName, project))
                 LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
-                                                                        'totalResults'] != '0' else None
+                                                                        'totalResults'] != '0' and (
+                                                                        'linkedin.com/in/' in searchResults['items'][0][
+                                                                            'link'] or 'linkedin.com/pub/' in
+                                                                        searchResults['items'][0]['link']) else None
             except Exception as e:
                 log.error('Failed to get LinkedIn URL. Error: %s\nData: %s', e, searchResults)
             # Find out if volunteer
@@ -149,7 +152,9 @@ class JIRADB(object):
                                                                           'admin'] is not None and 'admin' in whoisInfo[
                         'contacts'] and 'name' in whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
                                                                                          'name'] is not None and \
-                                (whoisInfo['contacts']['admin']['name'].lower() == person.displayName.lower() or 'whoisproxy' in whoisInfo['contacts']['admin']['email'])
+                                (whoisInfo['contacts']['admin'][
+                                     'name'].lower() == person.displayName.lower() or 'whoisproxy' in
+                                 whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
                     log.warn('Error in WHOIS query for %s: %s', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
