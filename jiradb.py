@@ -61,10 +61,6 @@ class JIRADB(object):
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
 
-    def googleSearchLinkedIn(self, query):
-        assert args.gkeyfile is not None, "A Google Custom Search API key is required to use this function."
-        return self.customSearch.list(q=query, cx=LINKEDIN_SEARCH_ID).execute()
-
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         # Refresh declarative schema
@@ -128,16 +124,22 @@ class JIRADB(object):
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
         if len(contributorList) == 0:
-            # Get LinkedIn page
-            try:
-                searchResults = jiradb.googleSearchLinkedIn('{} {}'.format(person.displayName, project))
-                LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
-                                                                        'totalResults'] != '0' and (
-                                                                        'linkedin.com/in/' in searchResults['items'][0][
-                                                                            'link'] or 'linkedin.com/pub/' in
-                                                                        searchResults['items'][0]['link']) else None
-            except Exception as e:
-                log.error('Failed to get LinkedIn URL. Error: %s\nData: %s', e, searchResults)
+            LinkedInPage = None
+            if args.gkeyfile is not None:
+                # Get LinkedIn page
+                searchResults = None
+                try:
+                    searchResults = self.customSearch.list(q='{} {}'.format(person.displayName, project),
+                                                           cx=LINKEDIN_SEARCH_ID).execute()
+                    LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
+                                                                            'totalResults'] != '0' and (
+                                                                            'linkedin.com/in/' in
+                                                                            searchResults['items'][0][
+                                                                                'link'] or 'linkedin.com/pub/' in
+                                                                            searchResults['items'][0]['link']) else None
+                except Exception as e:
+                    log.error('Failed to get LinkedIn URL. Error: %s', e)
+                    log.debug(searchResults)
             # Find out if volunteer
             volunteer = False
             for volunteerDomain in VOLUNTEER_DOMAINS:
