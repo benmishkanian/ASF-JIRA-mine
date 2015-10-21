@@ -158,7 +158,7 @@ class JIRADB(object):
                                      'name'].lower() == person.displayName.lower() or 'whoisproxy' in
                                  whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
-                    log.warn('Error in WHOIS query for %s: %s', domain, e)
+                    log.warn('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
                     volunteer = True
                 except ConnectionResetError as e:
