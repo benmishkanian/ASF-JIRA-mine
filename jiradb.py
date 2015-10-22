@@ -10,6 +10,15 @@ from jira import JIRA
 import pythonwhois
 
 log = logging.getLogger('jiradb')
+
+try:
+    from getEmployer import getEmployer
+
+    canGetEmployers = True
+except ImportError:
+    log.warn('No mechanism available to get employer names.')
+    canGetEmployers = False
+
 Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
@@ -40,7 +49,8 @@ class Contributor(Base):
                       Column('issuesReported', Integer, nullable=False),
                       Column('issuesResolved', Integer, nullable=False),
                       Column('assignedToCommercialCount', Integer, nullable=False),
-                      Column('LinkedInPage', String(128), nullable=True)
+                      Column('LinkedInPage', String(128), nullable=True),
+                      Column('employer', String(128), nullable=True)
                       )
 
 
@@ -148,7 +158,6 @@ class JIRADB(object):
                 row = self.session.query(self.cachedContributors).filter(
                     self.cachedContributors.c.email == contributorEmail).first()
                 if row is not None:
-                    log.warn('row is not none')
                     LinkedInPage = row.LinkedInPage
             elif args.gkeyfile is not None:
                 # Get LinkedIn page from Google Search
@@ -165,6 +174,12 @@ class JIRADB(object):
                 except Exception as e:
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
+            employer = None
+            if LinkedInPage is not None and canGetEmployers:
+                try:
+                    employer = getEmployer(LinkedInPage)
+                except Exception as e:
+                    log.warn('Failed to get employer of %s (%s). Reason: %s', person.displayName, contributorEmail, e)
             # Find out if volunteer
             volunteer = False
             for volunteerDomain in VOLUNTEER_DOMAINS:
@@ -191,7 +206,7 @@ class JIRADB(object):
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       isVolunteer=volunteer,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
-                                      LinkedInPage=LinkedInPage)
+                                      LinkedInPage=LinkedInPage, employer=employer)
             self.session.add(contributor)
         elif len(contributorList) == 1:
             contributor = contributorList[0]
