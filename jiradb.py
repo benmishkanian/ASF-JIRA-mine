@@ -19,68 +19,43 @@ LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
 class Issue(Base):
     __table__ = Table('issues', Base.metadata,
-          Column('id', Integer, primary_key=True),
-      Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=False),
-      Column('resolver_id', Integer, ForeignKey("contributors.id"), nullable=True),
-      Column('originalPriority', String(16), nullable=False),
-      Column('currentPriority', String(16), nullable=False),
-      Column('project', String(16), nullable=False)
-    )
+                      Column('id', Integer, primary_key=True),
+                      Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=False),
+                      Column('resolver_id', Integer, ForeignKey("contributors.id"), nullable=True),
+                      Column('originalPriority', String(16), nullable=False),
+                      Column('currentPriority', String(16), nullable=False),
+                      Column('project', String(16), nullable=False)
+                      )
     reporter = relationship("Contributor", foreign_keys=[__table__.c.reporter_id])
     resolver = relationship("Contributor", foreign_keys=[__table__.c.resolver_id])
-"""
-    __tablename__ = 'issues'
-
-    id = Column(Integer, primary_key=True)
-    reporter_id = Column(Integer, ForeignKey("contributors.id"), nullable=False)
-    reporter = relationship("Contributor", foreign_keys=[reporter_id])
-    resolver_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)
-    resolver = relationship("Contributor", foreign_keys=[resolver_id])
-    originalPriority = Column(String(16), nullable=False)
-    currentPriority = Column(String(16), nullable=False)
-    project = Column(String(16), nullable=False)"""
 
 
 class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
-        Column('id', Integer, primary_key=True),
-      Column('username', String(64), nullable=False),
-      Column('displayName', String(64), nullable=False),
-      Column('email', String(64), nullable=False),
-      Column('isVolunteer', Boolean, nullable=True),
-      Column('issuesReported', Integer, nullable=False),
-      Column('issuesResolved', Integer, nullable=False),
-      Column('assignedToCommercialCount', Integer, nullable=False),
-      Column('LinkedInPage', String(128), nullable=True)
-    )
-    """
-    __tablename__ = 'contributors'
-
-    id = Column(Integer, primary_key=True)
-    username = Column(String(64), nullable=False)
-    displayName = Column(String(64), nullable=False)
-    email = Column(String(64), nullable=False)
-    isVolunteer = Column(Boolean, nullable=True)
-    issuesReported = Column(Integer, nullable=False)
-    issuesResolved = Column(Integer, nullable=False)
-    assignedToCommercialCount = Column(Integer, nullable=False)
-    LinkedInPage = Column(String(128), nullable=True)"""
+                      Column('id', Integer, primary_key=True),
+                      Column('username', String(64), nullable=False),
+                      Column('displayName', String(64), nullable=False),
+                      Column('email', String(64), nullable=False),
+                      Column('isVolunteer', Boolean, nullable=True),
+                      Column('issuesReported', Integer, nullable=False),
+                      Column('issuesResolved', Integer, nullable=False),
+                      Column('assignedToCommercialCount', Integer, nullable=False),
+                      Column('LinkedInPage', String(128), nullable=True)
+                      )
 
 
 class CachedContributors(Base):
     __table__ = Table('cachedcontributors', Base.metadata,
-        Column('id', Integer, primary_key=True),
-      Column('username', String(64), nullable=False),
-      Column('displayName', String(64), nullable=False),
-      Column('email', String(64), nullable=False),
-      Column('isVolunteer', Boolean, nullable=True),
-      Column('issuesReported', Integer, nullable=False),
-      Column('issuesResolved', Integer, nullable=False),
-      Column('assignedToCommercialCount', Integer, nullable=False),
-      Column('LinkedInPage', String(128), nullable=True)
-    )
-
-
+                      Column('id', Integer, primary_key=True),
+                      Column('username', String(64), nullable=False),
+                      Column('displayName', String(64), nullable=False),
+                      Column('email', String(64), nullable=False),
+                      Column('isVolunteer', Boolean, nullable=True),
+                      Column('issuesReported', Integer, nullable=False),
+                      Column('issuesResolved', Integer, nullable=False),
+                      Column('assignedToCommercialCount', Integer, nullable=False),
+                      Column('LinkedInPage', String(128), nullable=True)
+                      )
 
 
 class JIRADB(object):
@@ -103,7 +78,6 @@ class JIRADB(object):
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
-
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -171,7 +145,8 @@ class JIRADB(object):
             LinkedInPage = None
             if args.cachedtable is not None:
                 # Try to get LinkedInPage from the cached table
-                row = self.session.query(self.cachedContributors).filter(self.cachedContributors.c.email == contributorEmail).first()
+                row = self.session.query(self.cachedContributors).filter(
+                    self.cachedContributors.c.email == contributorEmail).first()
                 if row is not None:
                     log.warn('row is not none')
                     LinkedInPage = row.LinkedInPage
@@ -203,10 +178,10 @@ class JIRADB(object):
                     volunteer = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
                                                                           'admin'] is not None and 'admin' in whoisInfo[
                         'contacts'] and 'name' in whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
-                                                                                         'name'] is not None and \
-                                (whoisInfo['contacts']['admin'][
-                                     'name'].lower() == person.displayName.lower() or 'whoisproxy' in
-                                 whoisInfo['contacts']['admin']['email'])
+                                                                                                                         'name'] is not None and (
+                                    whoisInfo['contacts']['admin'][
+                                        'name'].lower() == person.displayName.lower() or 'whoisproxy' in
+                                    whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
                     log.warn('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
@@ -238,11 +213,12 @@ def getArguments():
     parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
     parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
                         help='The database connection string')
-    parser.add_argument('--gkeyfile', dest='gkeyfile', action='store', help='File that contains a Google Custom Search API key enciphered by simple-crypt')
-    parser.add_argument('--cachedtable', dest='cachedtable', action='store', help='Table containing cached Google Search data')
+    parser.add_argument('--gkeyfile', dest='gkeyfile', action='store',
+                        help='File that contains a Google Custom Search API key enciphered by simple-crypt')
+    parser.add_argument('--cachedtable', dest='cachedtable', action='store',
+                        help='Table containing cached Google Search data')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
