@@ -1,6 +1,7 @@
 import time
 import logging
 import re
+import getpass
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table
 from sqlalchemy.ext.declarative import declarative_base
@@ -8,6 +9,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
 from jira import JIRA
 import pythonwhois
+from github3 import GitHub, login
 
 log = logging.getLogger('jiradb')
 
@@ -50,7 +52,9 @@ class Contributor(Base):
                       Column('issuesResolved', Integer, nullable=False),
                       Column('assignedToCommercialCount', Integer, nullable=False),
                       Column('LinkedInPage', String(128), nullable=True),
-                      Column('employer', String(128), nullable=True)
+                      Column('employer', String(128), nullable=True),
+                      Column('ghProfileCompany', String(64), nullable=True),
+                      Column('ghProfileLocation', String(64), nullable=True)
                       )
 
 
@@ -81,13 +85,19 @@ class JIRADB(object):
         elif args.gkeyfile is not None:
             # Enable Google Search
             from simplecrypt import decrypt
-            import getpass
             from apiclient.discovery import build
             gpass = getpass.getpass('Enter Google Search key password:')
             with open(args.gkeyfile, 'rb') as gkeyfilereader:
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
+        # Get handle to Github API
+        tok = getpass.getpass('Enter Github token:')
+        if tok != '':
+            self.gh = login(token=tok)
+        else:
+            log.warn('Using unauthenticated access to Github API. This will result in severe rate limiting.')
+            self.gh = GitHub()
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -146,8 +156,8 @@ class JIRADB(object):
             log.info("Refreshed DB for project %s", project)
 
     def persistContributor(self, person, project):
-        contributorEmail = person.emailAddress
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
+        contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
@@ -180,6 +190,73 @@ class JIRADB(object):
                     employer = getEmployer(LinkedInPage)
                 except Exception as e:
                     log.warn('Failed to get employer of %s (%s). Reason: %s', person.displayName, contributorEmail, e)
+            # Try to get information from Github profile
+
+            def waitForRateLimit(resourceType):
+                """resourceType can be 'search' or 'core'."""
+                rateLimitInfo = self.gh.rate_limit()['resources']
+                while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
+                    waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
+                    log.warn('Waiting %s seconds for Github rate limit...', waitTime)
+                    time.sleep(waitTime)
+                    rateLimitInfo = self.gh.rate_limit()['resources']
+
+            waitForRateLimit('search')
+            userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
+            if userResults.total_count > 10:
+                # Too many results to scan through. Add full name to search.
+                waitForRateLimit('search')
+                userResults = self.gh.search_users(
+                    contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
+                if userResults.total_count > 10:
+                    # Still too many results. Add username to search.
+                    waitForRateLimit('search')
+                    userResults = self.gh.search_users(contributorEmail.split('@')[
+                                                           0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
+
+            ghMatchedUser = None
+            # Search for an email match
+            userIndex = 0
+            for ghUserResult in userResults:
+                userIndex += 1
+                waitForRateLimit('core')
+                ghUser = ghUserResult.user.refresh(True)
+                if ghUser.email.lower() == contributorEmail.lower():
+                    # Found exact match for this email
+                    ghMatchedUser = ghUser
+                    break
+                elif userIndex > 10:
+                    break
+            if ghMatchedUser is None:
+                # Try to find them based on username
+                userIndex = 0
+                waitForRateLimit('search')
+                userResults = self.gh.search_users(person.name + ' in:login')
+                for ghUserResult in userResults:
+                    userIndex += 1
+                    waitForRateLimit('core')
+                    ghUser = ghUserResult.user.refresh(True)
+                    if ghUser.login.lower() == person.name.lower():
+                        # Found an account with the same username
+                        ghMatchedUser = ghUser
+                        break
+                    elif userIndex > 10:
+                        break
+            if ghMatchedUser is None:
+                # Try to find them based on real name
+                userIndex = 0
+                waitForRateLimit('search')
+                userResults = self.gh.search_users(person.displayName + ' in:fullname')
+                for ghUserResult in userResults:
+                    userIndex += 1
+                    waitForRateLimit('core')
+                    ghUser = ghUserResult.user.refresh(True)
+                    if ghUser.name.lower() == person.displayName.lower():
+                        # Found a person with the same name
+                        ghMatchedUser = ghUser
+                        break
+                    elif userIndex > 10:
+                        break
             # Find out if volunteer
             volunteer = False
             for volunteerDomain in VOLUNTEER_DOMAINS:
@@ -206,7 +283,9 @@ class JIRADB(object):
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       isVolunteer=volunteer,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
-                                      LinkedInPage=LinkedInPage, employer=employer)
+                                      LinkedInPage=LinkedInPage, employer=employer,
+                                      ghProfileCompany=None if ghMatchedUser is None else ghMatchedUser.company,
+                                      ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location)
             self.session.add(contributor)
         elif len(contributorList) == 1:
             contributor = contributorList[0]
