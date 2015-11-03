@@ -47,7 +47,7 @@ class Contributor(Base):
                       Column('username', String(64), nullable=False),
                       Column('displayName', String(64), nullable=False),
                       Column('email', String(64), nullable=False),
-                      Column('isVolunteer', Boolean, nullable=True),
+                      Column('hasFreeEmail', Boolean, nullable=True),
                       Column('issuesReported', Integer, nullable=False),
                       Column('issuesResolved', Integer, nullable=False),
                       Column('assignedToCommercialCount', Integer, nullable=False),
@@ -55,20 +55,6 @@ class Contributor(Base):
                       Column('employer', String(128), nullable=True),
                       Column('ghProfileCompany', String(64), nullable=True),
                       Column('ghProfileLocation', String(64), nullable=True)
-                      )
-
-
-class CachedContributors(Base):
-    __table__ = Table('cachedcontributors', Base.metadata,
-                      Column('id', Integer, primary_key=True),
-                      Column('username', String(64), nullable=False),
-                      Column('displayName', String(64), nullable=False),
-                      Column('email', String(64), nullable=False),
-                      Column('isVolunteer', Boolean, nullable=True),
-                      Column('issuesReported', Integer, nullable=False),
-                      Column('issuesResolved', Integer, nullable=False),
-                      Column('assignedToCommercialCount', Integer, nullable=False),
-                      Column('LinkedInPage', String(128), nullable=True)
                       )
 
 
@@ -148,7 +134,8 @@ class JIRADB(object):
                             contributorList = [c for c in
                                                self.session.query(Contributor).filter(item.to == Contributor.username)]
                             assert len(contributorList) < 2, "Too many Contributors returned for username " + item.to
-                            if len(contributorList) == 1 and not contributorList[0].isVolunteer:
+                            # TODO: Use more than just the hasFreeEmail feature to determine volunteer status
+                            if len(contributorList) == 1 and not contributorList[0].hasFreeEmail:
                                 # Increment count of times this assigner assigned to a commercial dev
                                 assigner = self.persistContributor(event.author, project)
                                 assigner.assignedToCommercialCount += 1
@@ -281,7 +268,7 @@ class JIRADB(object):
                 except ConnectionResetError as e:
                     log.warn('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
-                                      isVolunteer=volunteer,
+                                      hasFreeEmail=volunteer,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=None if ghMatchedUser is None else ghMatchedUser.company,
@@ -297,7 +284,7 @@ class JIRADB(object):
         return self.session.query(Contributor)
 
     def getVolunteers(self):
-        self.getContributors().filter_by(isVolunteer=True)
+        self.getContributors().filter_by(hasFreeEmail=True)
 
 
 def getArguments():
