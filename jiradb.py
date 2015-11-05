@@ -190,12 +190,12 @@ class JIRADB(object):
 
             waitForRateLimit('search')
             userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
-            if userResults.total_count > 10:
+            if userResults.total_count > args.ghscanlimit:
                 # Too many results to scan through. Add full name to search.
                 waitForRateLimit('search')
                 userResults = self.gh.search_users(
                     contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
-                if userResults.total_count > 10:
+                if userResults.total_count > args.ghscanlimit:
                     # Still too many results. Add username to search.
                     waitForRateLimit('search')
                     userResults = self.gh.search_users(contributorEmail.split('@')[
@@ -212,7 +212,7 @@ class JIRADB(object):
                     # Found exact match for this email
                     ghMatchedUser = ghUser
                     break
-                elif userIndex > 10:
+                elif userIndex >= args.ghscanlimit:
                     break
             if ghMatchedUser is None:
                 # Try to find them based on username
@@ -227,7 +227,7 @@ class JIRADB(object):
                         # Found an account with the same username
                         ghMatchedUser = ghUser
                         break
-                    elif userIndex > 10:
+                    elif userIndex >= args.ghscanlimit:
                         break
             if ghMatchedUser is None:
                 # Try to find them based on real name
@@ -242,7 +242,7 @@ class JIRADB(object):
                         # Found a person with the same name
                         ghMatchedUser = ghUser
                         break
-                    elif userIndex > 10:
+                    elif userIndex >= args.ghscanlimit:
                         break
             # Find out if volunteer
             volunteer = False
@@ -298,6 +298,8 @@ def getArguments():
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt')
     parser.add_argument('--cachedtable', dest='cachedtable', action='store',
                         help='Table containing cached Google Search data')
+    parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
+                        help='Maximum number of results to analyze per Github search')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
     return parser.parse_args()
 
