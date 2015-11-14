@@ -68,7 +68,7 @@ class JIRADB(object):
         if args.cachedtable is not None:
             # Use the data in the cached table
             self.cachedContributors = Table(args.cachedtable, Base.metadata, autoload_with=self.engine)
-        elif args.gkeyfile is not None:
+        if args.gkeyfile is not None:
             # Enable Google Search
             from simplecrypt import decrypt
             from apiclient.discovery import build
