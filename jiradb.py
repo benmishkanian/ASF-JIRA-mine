@@ -156,7 +156,7 @@ class JIRADB(object):
                     self.cachedContributors.c.email == contributorEmail).first()
                 if row is not None:
                     LinkedInPage = row.LinkedInPage
-            elif args.gkeyfile is not None:
+            if (LinkedInPage is None or LinkedInPage == '') and args.gkeyfile is not None:
                 # Get LinkedIn page from Google Search
                 searchResults = None
                 try:
@@ -168,6 +168,10 @@ class JIRADB(object):
                                                                             searchResults['items'][0][
                                                                                 'link'] or 'linkedin.com/pub/' in
                                                                             searchResults['items'][0]['link']) else None
+                    if args.cachedtable is not None:
+                        # Add this new LinkedInPage to the Google search cache table
+                        self.session.add(
+                            self.cachedContributors.insert({"email": contributorEmail, "LinkedInPage": LinkedInPage}))
                 except Exception as e:
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
