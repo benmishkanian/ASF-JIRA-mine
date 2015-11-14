@@ -256,11 +256,10 @@ class JIRADB(object):
                     whoisInfo = pythonwhois.get_whois(domain)
                     volunteer = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
                                                                           'admin'] is not None and 'admin' in whoisInfo[
-                        'contacts'] and 'name' in whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
-                                                                                                                         'name'] is not None and (
-                                    whoisInfo['contacts']['admin'][
-                                        'name'].lower() == person.displayName.lower() or 'whoisproxy' in
-                                    whoisInfo['contacts']['admin']['email'])
+                        'contacts'] and 'name' in whoisInfo['contacts']['admin'] and (
+                                whoisInfo['contacts']['admin']['name'] is not None and whoisInfo['contacts']['admin'][
+                                    'name'].lower() == person.displayName.lower() or whoisInfo['contacts']['admin'][
+                                    'email'] is not None and 'whoisproxy' in whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
                     log.warn('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
