@@ -248,30 +248,34 @@ class JIRADB(object):
                         break
                     elif userIndex >= args.ghscanlimit:
                         break
-            # Find out if volunteer
-            volunteer = False
+            # Find out if using a personal email address
+            usingPersonalEmail = False
             for volunteerDomain in VOLUNTEER_DOMAINS:
                 if volunteerDomain in contributorEmail:
-                    volunteer = True
-            if not volunteer:
+                    usingPersonalEmail = True
+            if not usingPersonalEmail:
                 # Check for personal domain
                 domain = EMAIL_DOMAIN_REGEX.search(contributorEmail).group(1)
                 try:
                     whoisInfo = pythonwhois.get_whois(domain)
-                    volunteer = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
+                    # Also check if they are using the WHOIS obfuscator "whoisproxy"
+                    usingPersonalEmail = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
                                                                           'admin'] is not None and 'admin' in whoisInfo[
-                        'contacts'] and 'name' in whoisInfo['contacts']['admin'] and (
-                                whoisInfo['contacts']['admin']['name'] is not None and whoisInfo['contacts']['admin'][
-                                    'name'].lower() == person.displayName.lower() or whoisInfo['contacts']['admin'][
+                        'contacts'] and (
+                                             'name' in whoisInfo['contacts']['admin'] and
+                                             whoisInfo['contacts']['admin']['name'] is not None and
+                                             whoisInfo['contacts']['admin'][
+                                                 'name'].lower() == person.displayName.lower() or 'email' in
+                                             whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
                                     'email'] is not None and 'whoisproxy' in whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
                     log.warn('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
-                    volunteer = True
+                    usingPersonalEmail = True
                 except ConnectionResetError as e:
                     log.warn('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
-                                      hasFreeEmail=volunteer,
+                                      hasFreeEmail=usingPersonalEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=None if ghMatchedUser is None else ghMatchedUser.company,
