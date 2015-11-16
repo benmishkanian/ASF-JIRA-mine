@@ -170,8 +170,9 @@ class JIRADB(object):
                                                                             searchResults['items'][0]['link']) else None
                     if args.cachedtable is not None:
                         # Add this new LinkedInPage to the Google search cache table
-                        self.session.add(
-                            self.cachedContributors.insert({"email": contributorEmail, "LinkedInPage": LinkedInPage}))
+                        result = self.engine.execute(self.cachedContributors.insert, email=contributorEmail,
+                                                     LinkedInPage=LinkedInPage)
+                        result.close()
                 except Exception as e:
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
@@ -273,6 +274,7 @@ class JIRADB(object):
                     # we assume that a corporate domain would have been more reliable than this
                     usingPersonalEmail = True
                 except ConnectionResetError as e:
+                    # this is probably a rate limit or IP ban, which is typically something only corporations do
                     log.warn('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       hasFreeEmail=usingPersonalEmail,
