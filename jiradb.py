@@ -2,7 +2,6 @@ import time
 import logging
 import re
 import getpass
-import code
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table
 from sqlalchemy.ext.declarative import declarative_base
@@ -34,6 +33,7 @@ class Issue(Base):
                       Column('id', Integer, primary_key=True),
                       Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=False),
                       Column('resolver_id', Integer, ForeignKey("contributors.id"), nullable=True),
+                      Column('isResolved', Boolean, nullable=False),
                       Column('originalPriority', String(16), nullable=False),
                       Column('currentPriority', String(16), nullable=False),
                       Column('project', String(16), nullable=False)
@@ -115,9 +115,8 @@ class JIRADB(object):
                             # Get most recent resolver
                             try:
                                 resolverJiraObject = event.author
-                            except Exception as e:
-                                log.error('Encountered error when scanning for issue resolvers: %s', e)
-                                code.interact(local=locals())
+                            except AttributeError:
+                                log.warn('Issue %s was resolved by an anonymous user', issue.key)
                         elif not foundOriginalPriority and item.field == 'priority':
                             # Get original priority
                             originalPriority = item.fromString
@@ -127,7 +126,8 @@ class JIRADB(object):
                     resolver = self.persistContributor(resolverJiraObject, project)
                     resolver.issuesResolved += 1
                 # Persist issue
-                newIssue = Issue(reporter=reporter, resolver=resolver, currentPriority=currentPriority,
+                newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
+                                 currentPriority=currentPriority,
                                  originalPriority=originalPriority,
                                  project=issue.fields.project.key)
                 self.session.add(newIssue)
@@ -142,6 +142,7 @@ class JIRADB(object):
                             # TODO: Use more than just the hasFreeEmail feature to determine volunteer status
                             if len(contributorList) == 1 and not contributorList[0].hasFreeEmail:
                                 # Increment count of times this assigner assigned to a commercial dev
+                                # TODO: is it possible that event.author could raise AtrributeError if the author is anonymous?
                                 assigner = self.persistContributor(event.author, project)
                                 assigner.assignedToCommercialCount += 1
             self.session.commit()
