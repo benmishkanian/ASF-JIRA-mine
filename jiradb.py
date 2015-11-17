@@ -176,7 +176,7 @@ class JIRADB(object):
                                                                             searchResults['items'][0]['link']) else None
                     if args.cachedtable is not None:
                         # Add this new LinkedInPage to the Google search cache table
-                        result = self.engine.execute(self.cachedContributors.insert, email=contributorEmail,
+                        result = self.engine.execute(self.cachedContributors.insert(), email=contributorEmail,
                                                      LinkedInPage=LinkedInPage)
                         result.close()
                 except Exception as e:
