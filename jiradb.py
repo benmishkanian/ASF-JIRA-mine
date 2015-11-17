@@ -2,6 +2,7 @@ import time
 import logging
 import re
 import getpass
+import code
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table
 from sqlalchemy.ext.declarative import declarative_base
@@ -112,7 +113,11 @@ class JIRADB(object):
                     for item in event.items:
                         if isResolved and item.field == 'status' and item.toString == 'Resolved':
                             # Get most recent resolver
-                            resolverJiraObject = event.author
+                            try:
+                                resolverJiraObject = event.author
+                            except Exception as e:
+                                log.error('Envountered error when scanning for issue resolvers: %s', e)
+                                code.interact(local=locals())
                         elif not foundOriginalPriority and item.field == 'priority':
                             # Get original priority
                             originalPriority = item.fromString
