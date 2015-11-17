@@ -116,7 +116,7 @@ class JIRADB(object):
                             try:
                                 resolverJiraObject = event.author
                             except Exception as e:
-                                log.error('Envountered error when scanning for issue resolvers: %s', e)
+                                log.error('Encountered error when scanning for issue resolvers: %s', e)
                                 code.interact(local=locals())
                         elif not foundOriginalPriority and item.field == 'priority':
                             # Get original priority
