@@ -282,6 +282,10 @@ class JIRADB(object):
                 except ConnectionResetError as e:
                     # this is probably a rate limit or IP ban, which is typically something only corporations do
                     log.warn('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
+                except UnicodeDecodeError as e:
+                    log.warn('UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
+                             domain, e)
+                    usingPersonalEmail = None
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       hasFreeEmail=usingPersonalEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
