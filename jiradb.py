@@ -78,6 +78,9 @@ class JIRADB(object):
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
+        if args.ghcache is not None:
+            # Reflect Github account data table
+            self.ghcache = Table(args.ghcache, Base.metadata, autoload_with=self.engine)
         # Get handle to Github API
         tok = getpass.getpass('Enter Github token:')
         if tok != '':
@@ -213,18 +216,24 @@ class JIRADB(object):
                                                            0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
 
             ghMatchedUser = None
-            # Search for an email match
-            userIndex = 0
-            for ghUserResult in userResults:
-                userIndex += 1
-                waitForRateLimit('core')
-                ghUser = ghUserResult.user.refresh(True)
-                if ghUser.email.lower() == contributorEmail.lower():
-                    # Found exact match for this email
-                    ghMatchedUser = ghUser
-                    break
-                elif userIndex >= args.ghscanlimit:
-                    break
+            if args.ghcache is not None:
+                # Attempt to use offline GHTorrent db for a quick Github username match
+                row = self.session.query(self.ghcache).filter(self.ghcache.c.email == contributorEmail).first()
+                if row is not None:
+                    ghMatchedUser = self.gh.user(row.login)
+            if ghMatchedUser is None:
+                # Search for an email match
+                userIndex = 0
+                for ghUserResult in userResults:
+                    userIndex += 1
+                    waitForRateLimit('core')
+                    ghUser = ghUserResult.user.refresh(True)
+                    if ghUser.email.lower() == contributorEmail.lower():
+                        # Found exact match for this email
+                        ghMatchedUser = ghUser
+                        break
+                    elif userIndex >= args.ghscanlimit:
+                        break
             if ghMatchedUser is None:
                 # Try to find them based on username
                 userIndex = 0
@@ -317,6 +326,8 @@ def getArguments():
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt')
     parser.add_argument('--cachedtable', dest='cachedtable', action='store',
                         help='Table containing cached Google Search data')
+    parser.add_argument('--ghcache', action='store',
+                        help='Table containing cached Github account data')
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
                         help='Maximum number of results to analyze per Github search')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
