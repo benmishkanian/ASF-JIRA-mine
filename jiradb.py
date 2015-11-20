@@ -302,6 +302,10 @@ class JIRADB(object):
                     log.warn('UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
                              domain, e)
                     usingPersonalEmail = None
+                except Exception as e:
+                    log.warn('Unexpected error in WHOIS query for @s: @s. No assumption will be made about domain.',
+                             domain, e)
+                    usingPersonalEmail = None
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       hasFreeEmail=usingPersonalEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
