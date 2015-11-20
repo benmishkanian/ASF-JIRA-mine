@@ -3,6 +3,7 @@ import logging
 import re
 import getpass
 
+from github3.null import NullObject
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -218,9 +219,15 @@ class JIRADB(object):
             ghMatchedUser = None
             if args.ghcache is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
-                row = self.session.query(self.ghcache).filter(self.ghcache.c.email == contributorEmail).first()
-                if row is not None:
-                    ghMatchedUser = self.gh.user(row.login)
+                rows = self.session.query(self.ghcache).filter(self.ghcache.c.email == contributorEmail)
+                for ghAccount in rows:
+                    waitForRateLimit('core')
+                    potentialUser = self.gh.user(ghAccount.login)
+                    if not isinstance(potentialUser, NullObject):
+                        # valid GitHub username
+                        ghMatchedUser = potentialUser.refresh(True)
+                        log.debug('Matched email %s to GitHub user %s', contributorEmail, ghMatchedUser.name)
+                        break
             if ghMatchedUser is None:
                 # Search for an email match
                 userIndex = 0
