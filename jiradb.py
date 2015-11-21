@@ -4,7 +4,7 @@ import re
 import getpass
 
 from github3.null import NullObject
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
@@ -55,8 +55,8 @@ class Contributor(Base):
                       Column('assignedToCommercialCount', Integer, nullable=False),
                       Column('LinkedInPage', String(128), nullable=True),
                       Column('employer', String(128), nullable=True),
-                      Column('ghProfileCompany', String(64), nullable=True),
-                      Column('ghProfileLocation', String(64), nullable=True)
+                      Column('ghProfileCompany', VARCHAR(), nullable=True),
+                      Column('ghProfileLocation', VARCHAR(), nullable=True)
                       )
 
 
