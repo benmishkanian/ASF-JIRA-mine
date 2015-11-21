@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from jira import JIRA
 import pythonwhois
 from github3 import GitHub, login
+from apiclient.errors import HttpError
 
 log = logging.getLogger('jiradb')
 
@@ -72,6 +73,7 @@ class JIRADB(object):
             self.cachedContributors = Table(args.cachedtable, Base.metadata, autoload_with=self.engine)
         if args.gkeyfile is not None:
             # Enable Google Search
+            self.googleSearchEnabled = True
             from simplecrypt import decrypt
             from apiclient.discovery import build
             gpass = getpass.getpass('Enter Google Search key password:')
@@ -166,12 +168,12 @@ class JIRADB(object):
                     self.cachedContributors.c.email == contributorEmail).first()
                 if row is not None:
                     LinkedInPage = row.LinkedInPage
-            if (LinkedInPage is None or LinkedInPage == '') and args.gkeyfile is not None:
+            if (LinkedInPage is None or LinkedInPage == '') and self.googleSearchEnabled:
                 # Get LinkedIn page from Google Search
                 searchResults = None
                 try:
-                    searchResults = self.customSearch.list(q='{} {}'.format(person.displayName, project),
-                                                           cx=LINKEDIN_SEARCH_ID).execute()
+                    searchTerm = '{} {}'.format(person.displayName, project)
+                    searchResults = self.customSearch.list(q=searchTerm, cx=LINKEDIN_SEARCH_ID).execute()
                     LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
                                                                             'totalResults'] != '0' and (
                                                                             'linkedin.com/in/' in
@@ -183,6 +185,12 @@ class JIRADB(object):
                         result = self.engine.execute(self.cachedContributors.insert(), email=contributorEmail,
                                                      LinkedInPage=LinkedInPage)
                         result.close()
+                except HttpError as e:
+                    if e.resp['status'] == '403':
+                        log.warn('Google search rate limit exceeded. Disabling Google search.')
+                        self.googleSearchEnabled = False
+                    else:
+                        log.error('Unexpected HttpError while executing Google search "%s"', searchTerm)
                 except Exception as e:
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
@@ -191,7 +199,8 @@ class JIRADB(object):
                 try:
                     employer = getEmployer(LinkedInPage)
                 except Exception as e:
-                    log.warn('Failed to get employer of %s (%s). Reason: %s', person.displayName, contributorEmail, e)
+                    log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s', person.displayName,
+                             contributorEmail, e)
             # Try to get information from Github profile
 
             def waitForRateLimit(resourceType):
