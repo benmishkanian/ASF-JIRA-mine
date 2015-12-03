@@ -78,6 +78,7 @@ class Contributor(Base):
                       Column('displayName', String(64), nullable=False),
                       Column('email', String(64), nullable=False),
                       Column('hasFreeEmail', Boolean, nullable=True),
+                      Column('hasRelatedCompanyEmail', Boolean, nullable=False),
                       Column('issuesReported', Integer, nullable=False),
                       Column('issuesResolved', Integer, nullable=False),
                       Column('assignedToCommercialCount', Integer, nullable=False),
@@ -175,8 +176,10 @@ class JIRADB(object):
                 asc(self.ghtorrentprojects.c.created_at))
             for row in rows:
                 # Store Company if not seen
-                if not self.session.query(Company).filter(Company.ghlogin == row.login):
-                    newCompany = Company(ghlogin=row.login, name=row.company_name, email=row.email)
+                if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
+                    newCompany = Company(ghlogin=row.login, name=row.company_name,
+                                         domain=None if row.email is None else EMAIL_DOMAIN_REGEX.search(
+                                             row.email).group(1))
                     self.session.add(newCompany)
                     newCompanyProject = CompanyProject(company=newCompany, project=project)
                     self.session.add(newCompanyProject)
@@ -399,8 +402,6 @@ class JIRADB(object):
                              domain, e)
                     usingPersonalEmail = None
 
-
-
             # TODO: there could be multiple rows returned?
             BHCommitCount = 0
             NonBHCommitCount = 0
@@ -421,8 +422,17 @@ class JIRADB(object):
                     else:
                         NonBHCommitCount += 1
 
+            # Find out if they have a domain from a company that is possibly contributing
+            rows = self.session.query(CompanyProject, Company.domain).join(Company).filter(
+                CompanyProject.project == project, Company.domain != '')
+            hasRelatedCompanyEmail = False
+            for row in rows:
+                if contributorEmail.lower().endswith(row.domain.lower()):
+                    hasRelatedCompanyEmail = True
+                    break
+
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
-                                      hasFreeEmail=usingPersonalEmail,
+                                      hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=None if ghMatchedUser is None else ghMatchedUser.company,
