@@ -2,7 +2,7 @@ import time
 import logging
 import re
 import getpass
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc
 
 from github3.null import NullObject
 from sqlalchemy.ext.declarative import declarative_base
@@ -44,6 +44,8 @@ def getArguments():
                         help='Table containing cached Google Search data')
     parser.add_argument('--ghcache', action='store',
                         help='Table containing cached Github account data')
+    parser.add_argument('--ghtorrentdbstring', action='store',
+                        help='The connection string for a ghtorrent database', required=True)
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
                         help='Maximum number of results to analyze per Github search')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
@@ -53,6 +55,7 @@ def getArguments():
 args = getArguments()
 mainEngine = create_engine(args.dbstring)
 Base = declarative_base(mainEngine)
+
 
 class Issue(Base):
     __table__ = Table('issues', Base.metadata,
@@ -87,18 +90,17 @@ class Contributor(Base):
                       )
 
 
-class Companies(Base):
+class Company(Base):
     __table__ = Table('companies', Base.metadata,
-                      Column('id', Integer, primary_key=True),
-                      Column('companyghlogin', VARCHAR(), nullable=True),
-                      Column('companyname', VARCHAR(), nullable=True),
-                      Column('companydomain', VARCHAR(), nullable=True)
+                      Column('ghlogin', VARCHAR(), primary_key=True),
+                      Column('name', VARCHAR(), nullable=True),
+                      Column('domain', VARCHAR(), nullable=True)
                       )
 
 
-class CompanyProjects(Base):
+class CompanyProject(Base):
     __table__ = Table('companyprojects', Base.metadata,
-                      Column('company_id', Integer, ForeignKey("companies.id"), primary_key=True),
+                      Column('company_ghlogin', VARCHAR(), ForeignKey("companies.ghlogin"), primary_key=True),
                       Column('project', VARCHAR(), nullable=False)
                       )
     company = relationship("Companies")
@@ -120,6 +122,14 @@ class JIRADB(object):
         self.mysqlmetadata = MetaData(self.mysqlengine)
         self.gitlog = Table('scmlog', self.mysqlmetadata, autoload_with=self.mysqlengine)
         self.gitpeople = Table('people', self.mysqlmetadata, autoload_with=self.mysqlengine)
+
+        # DB connection for ghtorrent
+        self.ghtorrentengine = create_engine(args.ghtorrentdbstring)
+        GHTorrentSession = sessionmaker(bind=self.ghtorrentengine)
+        self.ghtorrentsession = GHTorrentSession()
+        self.ghtorrentmetadata = MetaData(self.ghtorrentengine)
+        self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
+        self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
 
         if args.cachedtable is not None:
             # Use the data in the cached table
@@ -151,6 +161,25 @@ class JIRADB(object):
         Base.metadata.drop_all(self.engine, tables=[Issue.__table__, Contributor.__table__])
         Base.metadata.create_all(self.engine)
         for project in projectList:
+            apacheProjectCreationDate = self.ghtorrentsession.query(
+                self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
+                self.ghtorrentusers.c.login == 'apache' and self.ghtorrentprojects.c.name == project).first().project_creation_date
+            # TODO: may fail to find creation date
+            log.info('Scanning ghtorrent to find out which companies may be working on this project...')
+            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers).add_columns(
+                self.ghtorrentusers.c.login, self.ghtorrentusers.c.name.label('company_name'),
+                self.ghtorrentusers.c.email).filter(self.ghtorrentusers.c.type == 'ORG',
+                                                    self.ghtorrentprojects.c.name == project,
+                                                    self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
+                asc(self.ghtorrentprojects.c.created_at))
+            for row in rows:
+                # Store Company if not seen
+                if not self.session.query(Company).filter(Company.ghlogin == row.login):
+                    newCompany = Company(ghlogin=row.login, name=row.company_name, email=row.email)
+                    self.session.add(newCompany)
+                    newCompanyProject = CompanyProject(company=newCompany, project=project)
+                    self.session.add(newCompanyProject)
+
             log.info("Scanning project %s...", project)
             scanStartTime = time.time()
             jira = JIRA('https://issues.apache.org/jira')
