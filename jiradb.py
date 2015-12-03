@@ -2,9 +2,9 @@ import time
 import logging
 import re
 import getpass
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData
 
 from github3.null import NullObject
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import sessionmaker
@@ -23,12 +23,36 @@ except ImportError:
     log.warn('No mechanism available to get employer names.')
     canGetEmployers = False
 
-Base = declarative_base()
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
 EMAIL_DOMAIN_REGEX = re.compile('.+@(\S+)')
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
+
+def getArguments():
+    # Parse script arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
+    parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
+    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
+                        help='The database connection string')
+    parser.add_argument('--mysqldbstring', action='store',
+                        help='The connection string for a MySQL database containing a cvsanaly dump', required=True)
+    parser.add_argument('--gkeyfile', dest='gkeyfile', action='store',
+                        help='File that contains a Google Custom Search API key enciphered by simple-crypt')
+    parser.add_argument('--cachedtable', dest='cachedtable', action='store',
+                        help='Table containing cached Google Search data')
+    parser.add_argument('--ghcache', action='store',
+                        help='Table containing cached Github account data')
+    parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
+                        help='Maximum number of results to analyze per Github search')
+    parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
+    return parser.parse_args()
+
+
+args = getArguments()
+mainEngine = create_engine(args.dbstring)
+Base = declarative_base(mainEngine)
 
 class Issue(Base):
     __table__ = Table('issues', Base.metadata,
@@ -57,17 +81,29 @@ class Contributor(Base):
                       Column('LinkedInPage', String(128), nullable=True),
                       Column('employer', String(128), nullable=True),
                       Column('ghProfileCompany', VARCHAR(), nullable=True),
-                      Column('ghProfileLocation', VARCHAR(), nullable=True)
+                      Column('ghProfileLocation', VARCHAR(), nullable=True),
+                      Column('BHCommitCount', Integer, nullable=True),
+                      Column('NonBHCommitCount', Integer, nullable=True)
                       )
 
 
 class JIRADB(object):
-    def __init__(self, dbstring):
+    def __init__(self, engine):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
-        self.engine = create_engine(dbstring)
+        # Main DB connection
+        self.engine = engine
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         Base.metadata.create_all(self.engine)
+
+        # MySQL connection for cvsanaly
+        self.mysqlengine = create_engine(args.mysqldbstring)
+        MySQLSession = sessionmaker(bind=self.mysqlengine)
+        self.mysqlsession = MySQLSession()
+        self.mysqlmetadata = MetaData(self.mysqlengine)
+        self.gitlog = Table('scmlog', self.mysqlmetadata, autoload_with=self.mysqlengine)
+        self.gitpeople = Table('people', self.mysqlmetadata, autoload_with=self.mysqlengine)
+
         if args.cachedtable is not None:
             # Use the data in the cached table
             self.cachedContributors = Table(args.cachedtable, Base.metadata, autoload_with=self.engine)
@@ -315,12 +351,36 @@ class JIRADB(object):
                     log.warn('Unexpected error in WHOIS query for @s: @s. No assumption will be made about domain.',
                              domain, e)
                     usingPersonalEmail = None
+
+
+
+            # TODO: there could be multiple rows returned?
+            BHCommitCount = 0
+            NonBHCommitCount = 0
+            # match email on git
+            row = self.mysqlsession.query(self.gitpeople).filter(self.gitpeople.c.email == contributorEmail).first()
+            if row is None:
+                # match name on git
+                row = self.mysqlsession.query(self.gitpeople).filter(
+                    self.gitpeople.c.name == person.displayName).first()
+            if row is not None:
+                # Find out when they do most of their commits
+
+                rows = self.mysqlsession.query(self.gitlog).filter(self.gitlog.c.author_id == 17)
+                for row in rows:
+                    t = row.author_date
+                    if t.hour > 10 and t.hour < 16:
+                        BHCommitCount += 1
+                    else:
+                        NonBHCommitCount += 1
+
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       hasFreeEmail=usingPersonalEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=None if ghMatchedUser is None else ghMatchedUser.company,
-                                      ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location)
+                                      ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location,
+                                      BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount)
             self.session.add(contributor)
         elif len(contributorList) == 1:
             contributor = contributorList[0]
@@ -333,25 +393,6 @@ class JIRADB(object):
 
     def getVolunteers(self):
         self.getContributors().filter_by(hasFreeEmail=True)
-
-
-def getArguments():
-    # Parse script arguments
-    import argparse
-    parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
-    parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
-    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
-                        help='The database connection string')
-    parser.add_argument('--gkeyfile', dest='gkeyfile', action='store',
-                        help='File that contains a Google Custom Search API key enciphered by simple-crypt')
-    parser.add_argument('--cachedtable', dest='cachedtable', action='store',
-                        help='Table containing cached Google Search data')
-    parser.add_argument('--ghcache', action='store',
-                        help='Table containing cached Github account data')
-    parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
-                        help='Maximum number of results to analyze per Github search')
-    parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
-    return parser.parse_args()
 
 
 if __name__ == "__main__":
@@ -367,6 +408,5 @@ if __name__ == "__main__":
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
 
-    args = getArguments()
-    jiradb = JIRADB(dbstring=args.dbstring)
+    jiradb = JIRADB(mainEngine)
     jiradb.persistIssues(args.projects)
