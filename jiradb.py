@@ -87,6 +87,23 @@ class Contributor(Base):
                       )
 
 
+class Companies(Base):
+    __table__ = Table('companies', Base.metadata,
+                      Column('id', Integer, primary_key=True),
+                      Column('companyghlogin', VARCHAR(), nullable=True),
+                      Column('companyname', VARCHAR(), nullable=True),
+                      Column('companydomain', VARCHAR(), nullable=True)
+                      )
+
+
+class CompanyProjects(Base):
+    __table__ = Table('companyprojects', Base.metadata,
+                      Column('company_id', Integer, ForeignKey("companies.id"), primary_key=True),
+                      Column('project', VARCHAR(), nullable=False)
+                      )
+    company = relationship("Companies")
+
+
 class JIRADB(object):
     def __init__(self, engine):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
@@ -348,7 +365,7 @@ class JIRADB(object):
                              domain, e)
                     usingPersonalEmail = None
                 except Exception as e:
-                    log.warn('Unexpected error in WHOIS query for @s: @s. No assumption will be made about domain.',
+                    log.warn('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
                              domain, e)
                     usingPersonalEmail = None
 
