@@ -163,7 +163,8 @@ class JIRADB(object):
         for project in projectList:
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
-                self.ghtorrentusers.c.login == 'apache' and self.ghtorrentprojects.c.name == project).first().project_creation_date
+                self.ghtorrentusers.c.login == 'apache',
+                self.ghtorrentprojects.c.name == project).first().project_creation_date
             # TODO: may fail to find creation date
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
             rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers).add_columns(
