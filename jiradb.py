@@ -103,7 +103,7 @@ class CompanyProject(Base):
                       Column('company_ghlogin', VARCHAR(), ForeignKey("companies.ghlogin"), primary_key=True),
                       Column('project', VARCHAR(), nullable=False)
                       )
-    company = relationship("Companies")
+    company = relationship("Company")
 
 
 class JIRADB(object):
