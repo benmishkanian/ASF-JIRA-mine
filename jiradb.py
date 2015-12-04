@@ -412,9 +412,9 @@ class JIRADB(object):
                 row = self.mysqlsession.query(self.gitpeople).filter(
                     self.gitpeople.c.name == person.displayName).first()
             if row is not None:
+                log.debug('Matched %s on git log.', person.displayName)
                 # Find out when they do most of their commits
-
-                rows = self.mysqlsession.query(self.gitlog).filter(self.gitlog.c.author_id == 17)
+                rows = self.mysqlsession.query(self.gitlog).filter(self.gitlog.c.author_id == row.id)
                 for row in rows:
                     t = row.author_date
                     if t.hour > 10 and t.hour < 16:
