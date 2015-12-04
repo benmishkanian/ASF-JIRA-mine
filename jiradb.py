@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boole
 
 from github3.null import NullObject
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, aliased
 from sqlalchemy.orm import sessionmaker
 from jira import JIRA
 import pythonwhois
@@ -85,6 +85,8 @@ class Contributor(Base):
                       Column('LinkedInPage', String(128), nullable=True),
                       Column('employer', String(128), nullable=True),
                       Column('ghProfileCompany', VARCHAR(), nullable=True),
+                      Column('hasRelatedEmployer', Boolean, nullable=False),
+                      Column('isRelatedOrgMember', Boolean, nullable=False),
                       Column('ghProfileLocation', VARCHAR(), nullable=True),
                       Column('BHCommitCount', Integer, nullable=True),
                       Column('NonBHCommitCount', Integer, nullable=True)
@@ -131,6 +133,8 @@ class JIRADB(object):
         self.ghtorrentmetadata = MetaData(self.ghtorrentengine)
         self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
         self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
+        self.ghtorrentorganization_members = Table('organization_members', self.ghtorrentmetadata,
+                                                   autoload_with=self.ghtorrentengine)
 
         if args.googlecache is not None:
             # Use the data in the cached table
@@ -425,19 +429,50 @@ class JIRADB(object):
                         NonBHCommitCount += 1
 
             # Find out if they have a domain from a company that is possibly contributing
+            # TODO: check if '!=' does what I think it does
             rows = self.session.query(CompanyProject, Company.domain).join(Company).filter(
                 CompanyProject.project == project, Company.domain != '')
+            log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedCompanyEmail = False
             for row in rows:
                 if contributorEmail.lower().endswith(row.domain.lower()):
                     hasRelatedCompanyEmail = True
                     break
 
+            # Find out if they work at a company that is possibly contributing
+            rows = self.session.query(CompanyProject, Company.name).join(Company).filter(
+                CompanyProject.project == project, Company.name != '')
+            log.debug('%s rows from query %s', rows.count(), rows)
+            hasRelatedEmployer = False
+            ghProfileCompany = None if ghMatchedUser is None else ghMatchedUser.company
+            for row in rows:
+                if ghProfileCompany is not None and row.name.lower() == ghProfileCompany.lower() or employer is not None and row.name.lower() == employer.lower():
+                    hasRelatedEmployer = True
+                    break
+
+            # Find out if their github account is a member of an organization that is possibly contributing
+            isRelatedOrgMember = False
+            if ghMatchedUser is not None:
+                orgusers = aliased(self.ghtorrentusers)
+                rows = self.ghtorrentsession.query(self.ghtorrentorganization_members,
+                                                   orgusers.c.login.label('orglogin')).join(self.ghtorrentusers,
+                                                                                            self.ghtorrentorganization_members.c.user_id == self.ghtorrentusers.c.id).join(
+                    orgusers, self.ghtorrentorganization_members.c.org_id == orgusers.c.id).filter(
+                    self.ghtorrentusers.c.login == ghMatchedUser.login.lower())
+                # check if any of those orgs are a possibly contributing org
+                for row in rows:
+                    relatedorgrows = self.session.query(CompanyProject, Company.ghlogin).join(Company).filter(
+                        CompanyProject.project == project)
+                    if row.orglogin.lower() in [orgrow.ghlogin for orgrow in relatedorgrows]:
+                        isRelatedOrgMember = True
+                        break
+
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
-                                      ghProfileCompany=None if ghMatchedUser is None else ghMatchedUser.company,
+                                      ghProfileCompany=ghProfileCompany, hasRelatedEmployer=hasRelatedEmployer,
+                                      isRelatedOrgMember=isRelatedOrgMember,
                                       ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location,
                                       BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount)
             self.session.add(contributor)
