@@ -34,15 +34,15 @@ def getArguments():
     import argparse
     parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
     parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
-    parser.add_argument('--dbstring', dest='dbstring', action='store', default='sqlite:///sqlite.db',
+    parser.add_argument('--dbstring', action='store', default='sqlite:///sqlite.db',
                         help='The database connection string')
-    parser.add_argument('--mysqldbstring', action='store',
+    parser.add_argument('--gitdbstring', action='store',
                         help='The connection string for a MySQL database containing a cvsanaly dump', required=True)
-    parser.add_argument('--gkeyfile', dest='gkeyfile', action='store',
+    parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt')
-    parser.add_argument('--cachedtable', dest='cachedtable', action='store',
+    parser.add_argument('--googlecache', action='store',
                         help='Table containing cached Google Search data')
-    parser.add_argument('--ghcache', action='store',
+    parser.add_argument('--ghusersextended', action='store',
                         help='Table containing the dump of users_data_aggregated_gender.csv')
     parser.add_argument('--ghtorrentdbstring', action='store',
                         help='The connection string for a ghtorrent database', required=True)
@@ -117,7 +117,7 @@ class JIRADB(object):
         Base.metadata.create_all(self.engine)
 
         # MySQL connection for cvsanaly
-        self.mysqlengine = create_engine(args.mysqldbstring)
+        self.mysqlengine = create_engine(args.gitdbstring)
         MySQLSession = sessionmaker(bind=self.mysqlengine)
         self.mysqlsession = MySQLSession()
         self.mysqlmetadata = MetaData(self.mysqlengine)
@@ -132,9 +132,9 @@ class JIRADB(object):
         self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
         self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
 
-        if args.cachedtable is not None:
+        if args.googlecache is not None:
             # Use the data in the cached table
-            self.cachedContributors = Table(args.cachedtable, Base.metadata, autoload_with=self.engine)
+            self.cachedContributors = Table(args.googlecache, Base.metadata, autoload_with=self.engine)
         self.googleSearchEnabled = False
         if args.gkeyfile is not None:
             # Enable Google Search
@@ -146,9 +146,9 @@ class JIRADB(object):
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
-        if args.ghcache is not None:
+        if args.ghusersextended is not None:
             # Reflect Github account data table
-            self.ghcache = Table(args.ghcache, Base.metadata, autoload_with=self.engine)
+            self.ghusersextended = Table(args.ghusersextended, Base.metadata, autoload_with=self.engine)
         # Get handle to Github API
         tok = getpass.getpass('Enter Github token:')
         if tok != '':
@@ -249,7 +249,7 @@ class JIRADB(object):
         contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
         if len(contributorList) == 0:
             LinkedInPage = None
-            if args.cachedtable is not None:
+            if args.googlecache is not None:
                 # Try to get LinkedInPage from the cached table
                 row = self.session.query(self.cachedContributors).filter(
                     self.cachedContributors.c.email == contributorEmail).first()
@@ -267,7 +267,7 @@ class JIRADB(object):
                                                                             searchResults['items'][0][
                                                                                 'link'] or 'linkedin.com/pub/' in
                                                                             searchResults['items'][0]['link']) else None
-                    if args.cachedtable is not None:
+                    if args.googlecache is not None:
                         # Add this new LinkedInPage to the Google search cache table
                         result = self.engine.execute(self.cachedContributors.insert(), email=contributorEmail,
                                                      LinkedInPage=LinkedInPage)
@@ -300,9 +300,9 @@ class JIRADB(object):
                     rateLimitInfo = self.gh.rate_limit()['resources']
 
             ghMatchedUser = None
-            if args.ghcache is not None:
+            if args.ghusersextended is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
-                rows = self.session.query(self.ghcache).filter(self.ghcache.c.email == contributorEmail)
+                rows = self.session.query(self.ghusersextended).filter(self.ghusersextended.c.email == contributorEmail)
                 for ghAccount in rows:
                     waitForRateLimit('core')
                     potentialUser = self.gh.user(ghAccount.login)
