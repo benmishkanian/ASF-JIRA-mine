@@ -43,7 +43,7 @@ def getArguments():
     parser.add_argument('--cachedtable', dest='cachedtable', action='store',
                         help='Table containing cached Google Search data')
     parser.add_argument('--ghcache', action='store',
-                        help='Table containing cached Github account data')
+                        help='Table containing the dump of users_data_aggregated_gender.csv')
     parser.add_argument('--ghtorrentdbstring', action='store',
                         help='The connection string for a ghtorrent database', required=True)
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
@@ -135,6 +135,7 @@ class JIRADB(object):
         if args.cachedtable is not None:
             # Use the data in the cached table
             self.cachedContributors = Table(args.cachedtable, Base.metadata, autoload_with=self.engine)
+        self.googleSearchEnabled = False
         if args.gkeyfile is not None:
             # Enable Google Search
             self.googleSearchEnabled = True
