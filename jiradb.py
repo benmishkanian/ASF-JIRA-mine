@@ -117,12 +117,12 @@ class JIRADB(object):
         Base.metadata.create_all(self.engine)
 
         # MySQL connection for cvsanaly
-        self.mysqlengine = create_engine(args.gitdbstring)
-        MySQLSession = sessionmaker(bind=self.mysqlengine)
-        self.mysqlsession = MySQLSession()
-        self.mysqlmetadata = MetaData(self.mysqlengine)
-        self.gitlog = Table('scmlog', self.mysqlmetadata, autoload_with=self.mysqlengine)
-        self.gitpeople = Table('people', self.mysqlmetadata, autoload_with=self.mysqlengine)
+        self.gitdbengine = create_engine(args.gitdbstring)
+        GitDBSession = sessionmaker(bind=self.gitdbengine)
+        self.gitdbsession = GitDBSession()
+        self.gitdbmetadata = MetaData(self.gitdbengine)
+        self.gitlog = Table('scmlog', self.gitdbmetadata, autoload_with=self.gitdbengine)
+        self.gitpeople = Table('people', self.gitdbmetadata, autoload_with=self.gitdbengine)
 
         # DB connection for ghtorrent
         self.ghtorrentengine = create_engine(args.ghtorrentdbstring)
@@ -408,15 +408,15 @@ class JIRADB(object):
             BHCommitCount = 0
             NonBHCommitCount = 0
             # match email on git
-            row = self.mysqlsession.query(self.gitpeople).filter(self.gitpeople.c.email == contributorEmail).first()
+            row = self.gitdbsession.query(self.gitpeople).filter(self.gitpeople.c.email == contributorEmail).first()
             if row is None:
                 # match name on git
-                row = self.mysqlsession.query(self.gitpeople).filter(
+                row = self.gitdbsession.query(self.gitpeople).filter(
                     self.gitpeople.c.name == person.displayName).first()
             if row is not None:
                 log.debug('Matched %s on git log.', person.displayName)
                 # Find out when they do most of their commits
-                rows = self.mysqlsession.query(self.gitlog).filter(self.gitlog.c.author_id == row.id)
+                rows = self.gitdbsession.query(self.gitlog).filter(self.gitlog.c.author_id == row.id)
                 for row in rows:
                     t = row.author_date
                     if t.hour > 10 and t.hour < 16:
