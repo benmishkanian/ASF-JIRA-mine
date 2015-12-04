@@ -287,8 +287,8 @@ class JIRADB(object):
                 except Exception as e:
                     log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s', person.displayName,
                              contributorEmail, e)
-            # Try to get information from Github profile
 
+            # Try to get information from Github profile
             def waitForRateLimit(resourceType):
                 """resourceType can be 'search' or 'core'."""
                 rateLimitInfo = self.gh.rate_limit()['resources']
@@ -297,19 +297,6 @@ class JIRADB(object):
                     log.warn('Waiting %s seconds for Github rate limit...', waitTime)
                     time.sleep(waitTime)
                     rateLimitInfo = self.gh.rate_limit()['resources']
-
-            waitForRateLimit('search')
-            userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
-            if userResults.total_count > args.ghscanlimit:
-                # Too many results to scan through. Add full name to search.
-                waitForRateLimit('search')
-                userResults = self.gh.search_users(
-                    contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
-                if userResults.total_count > args.ghscanlimit:
-                    # Still too many results. Add username to search.
-                    waitForRateLimit('search')
-                    userResults = self.gh.search_users(contributorEmail.split('@')[
-                                                           0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
 
             ghMatchedUser = None
             if args.ghcache is not None:
@@ -323,8 +310,22 @@ class JIRADB(object):
                         ghMatchedUser = potentialUser.refresh(True)
                         log.debug('Matched email %s to GitHub user %s', contributorEmail, ghMatchedUser.name)
                         break
+
             if ghMatchedUser is None:
-                # Search for an email match
+                # Search email prefix on github
+                waitForRateLimit('search')
+                userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
+                if userResults.total_count > args.ghscanlimit:
+                    # Too many results to scan through. Add full name to search.
+                    waitForRateLimit('search')
+                    userResults = self.gh.search_users(
+                        contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
+                    if userResults.total_count > args.ghscanlimit:
+                        # Still too many results. Add username to search.
+                        waitForRateLimit('search')
+                        userResults = self.gh.search_users(contributorEmail.split('@')[
+                                                               0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
+                # Scan search results for an exact email match
                 userIndex = 0
                 for ghUserResult in userResults:
                     userIndex += 1
