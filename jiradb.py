@@ -87,6 +87,7 @@ class Contributor(Base):
                       Column('ghProfileCompany', VARCHAR(), nullable=True),
                       Column('hasRelatedEmployer', Boolean, nullable=False),
                       Column('isRelatedOrgMember', Boolean, nullable=False),
+                      Column('isRelatedProjectCommitter', Boolean, nullable=False),
                       Column('ghProfileLocation', VARCHAR(), nullable=True),
                       Column('BHCommitCount', Integer, nullable=True),
                       Column('NonBHCommitCount', Integer, nullable=True)
@@ -135,6 +136,9 @@ class JIRADB(object):
         self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
         self.ghtorrentorganization_members = Table('organization_members', self.ghtorrentmetadata,
                                                    autoload_with=self.ghtorrentengine)
+        self.ghtorrentproject_commits = Table('project_commits', self.ghtorrentmetadata,
+                                              autoload_with=self.ghtorrentengine)
+        self.ghtorrentcommits = Table('commits', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
 
         if args.googlecache is not None:
             # Use the data in the cached table
@@ -450,6 +454,11 @@ class JIRADB(object):
                     hasRelatedEmployer = True
                     break
 
+            # Get list of related org logins (used for the next two sections)
+            relatedorgrows = self.session.query(CompanyProject, Company.ghlogin).join(Company).filter(
+                CompanyProject.project == project)
+            relatedOrgLogins = [orgrow.ghlogin for orgrow in relatedorgrows]
+
             # Find out if their github account is a member of an organization that is possibly contributing
             isRelatedOrgMember = False
             if ghMatchedUser is not None:
@@ -461,11 +470,32 @@ class JIRADB(object):
                     self.ghtorrentusers.c.login == ghMatchedUser.login.lower())
                 # check if any of those orgs are a possibly contributing org
                 for row in rows:
-                    relatedorgrows = self.session.query(CompanyProject, Company.ghlogin).join(Company).filter(
-                        CompanyProject.project == project)
-                    if row.orglogin.lower() in [orgrow.ghlogin for orgrow in relatedorgrows]:
+                    if row.orglogin in relatedOrgLogins:
                         isRelatedOrgMember = True
                         break
+
+            # Find out if they committed to a related project
+            def getRelatedProjectID(orgLogin, projectName):
+                return self.ghtorrentsession.query(self.ghtorrentprojects.c.id).join(self.ghtorrentusers).filter(
+                    self.ghtorrentprojects.c.name == projectName, self.ghtorrentusers.c.login == orgLogin)
+
+            isRelatedProjectCommitter = False
+            for orgLogin in relatedOrgLogins:
+                subq = self.ghtorrentsession.query(self.ghtorrentproject_commits,
+                                                   self.ghtorrentcommits.c.committer_id).join(
+                    self.ghtorrentcommits).filter(
+                    self.ghtorrentproject_commits.c.project_id == getRelatedProjectID(orgLogin, project)).subquery(
+                    'distinct_committers')
+                log.info(subq)
+                log.info('next...')
+                committerRows = self.ghtorrentsession.query(subq.c.committer_id.distinct(),
+                                                            self.ghtorrentusers.c.name).join(self.ghtorrentusers,
+                                                                                             subq.alias(
+                                                                                                 'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
+                log.info(committerRows)
+                if person.displayName in [committer.name for committer in committerRows]:
+                    isRelatedProjectCommitter = True
+                    break
 
             contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
                                       hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
@@ -473,6 +503,7 @@ class JIRADB(object):
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=ghProfileCompany, hasRelatedEmployer=hasRelatedEmployer,
                                       isRelatedOrgMember=isRelatedOrgMember,
+                                      isRelatedProjectCommitter=isRelatedProjectCommitter,
                                       ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location,
                                       BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount)
             self.session.add(contributor)
