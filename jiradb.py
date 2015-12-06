@@ -486,13 +486,10 @@ class JIRADB(object):
                     self.ghtorrentcommits).filter(
                     self.ghtorrentproject_commits.c.project_id == getRelatedProjectID(orgLogin, project)).subquery(
                     'distinct_committers')
-                log.info(subq)
-                log.info('next...')
                 committerRows = self.ghtorrentsession.query(subq.c.committer_id.distinct(),
                                                             self.ghtorrentusers.c.name).join(self.ghtorrentusers,
                                                                                              subq.alias(
                                                                                                  'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
-                log.info(committerRows)
                 if person.displayName in [committer.name for committer in committerRows]:
                     isRelatedProjectCommitter = True
                     break
