@@ -286,7 +286,8 @@ class JIRADB(object):
             for issue in issuePool:
                 for event in issue.changelog.histories:
                     for item in event.items:
-                        if item.field == 'assignee':
+                        # TODO: do we care when contributors clear the assignee field (i.e. item.to = None)?
+                        if item.field == 'assignee' and item.to is not None:
                             # Check if the assignee is a known contributor
                             contributorList = [c for c in
                                                self.session.query(Contributor).join(ContributorAccount).filter(
