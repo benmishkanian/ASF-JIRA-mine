@@ -287,7 +287,7 @@ class JIRADB(object):
                 for event in issue.changelog.histories:
                     for item in event.items:
                         if item.field == 'assignee':
-                            # Did they assign to a known commercial dev?
+                            # Check if the assignee is a known contributor
                             contributorList = [c for c in
                                                self.session.query(Contributor).join(ContributorAccount).filter(
                                                    ContributorAccount.service == "jira",
@@ -306,6 +306,9 @@ class JIRADB(object):
                                 # Increment count of times this assigner assigned to this assignee
                                 issueAssignment.count += 1
                                 self.session.add(issueAssignment)
+                            else:
+                                log.warn('%s assigned % to unknown contributor %s. Ignoring.', event.author, issue.key,
+                                         item.to)
 
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
