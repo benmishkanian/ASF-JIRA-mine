@@ -74,9 +74,6 @@ class Issue(Base):
 class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
                       Column('id', Integer, primary_key=True),
-                      Column('username', String(64), nullable=False),
-                      Column('displayName', String(64), nullable=False),
-                      Column('email', String(64), nullable=False),
                       Column('hasFreeEmail', Boolean, nullable=True),
                       Column('hasRelatedCompanyEmail', Boolean, nullable=False),
                       Column('issuesReported', Integer, nullable=False),
@@ -92,6 +89,27 @@ class Contributor(Base):
                       Column('BHCommitCount', Integer, nullable=True),
                       Column('NonBHCommitCount', Integer, nullable=True)
                       )
+
+
+class ContributorAccount(Base):
+    __table__ = Table('contributoraccounts', Base.metadata,
+                      Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False,
+                             primary_key=True),
+                      Column('username', String(64)),
+                      Column('service', String(8)),
+                      Column('displayName', String(64), nullable=True),
+                      Column('email', String(64))
+                      )
+    contributor = relationship("Contributor")
+
+
+class ContributorProject(Base):
+    __table__ = Table('contributorprojects', Base.metadata,
+                      Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False,
+                             primary_key=True),
+                      Column('project', String(32))
+                      )
+    contributor = relationship("Contributor")
 
 
 class Company(Base):
@@ -168,6 +186,7 @@ class JIRADB(object):
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         # Refresh declarative schema
+        Base.metadata.drop_all(self.engine, tables=[ContributorAccount.__table__, ContributorProject.__table__])
         Base.metadata.drop_all(self.engine, tables=[Issue.__table__, Contributor.__table__])
         Base.metadata.create_all(self.engine)
         for project in projectList:
@@ -203,7 +222,7 @@ class JIRADB(object):
                 # Get current priority
                 currentPriority = issue.fields.priority.name
                 # Get reporter
-                reporter = self.persistContributor(issue.fields.reporter, project)
+                reporter = self.persistContributor(issue.fields.reporter, project, "jira")
                 reporter.issuesReported += 1
                 # Scan changelog
                 resolver = None
@@ -224,7 +243,7 @@ class JIRADB(object):
                             foundOriginalPriority = True
                 if isResolved:
                     assert resolverJiraObject is not None, "Failed to get resolver for resolved issue " + issue
-                    resolver = self.persistContributor(resolverJiraObject, project)
+                    resolver = self.persistContributor(resolverJiraObject, project, "jira")
                     resolver.issuesResolved += 1
                 # Persist issue
                 newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
@@ -238,24 +257,33 @@ class JIRADB(object):
                         if item.field == 'assignee':
                             # Did they assign to a known commercial dev?
                             contributorList = [c for c in
-                                               self.session.query(Contributor).filter(item.to == Contributor.username)]
+                                               self.session.query(Contributor).join(ContributorAccount).filter(
+                                                   ContributorAccount.service == "jira",
+                                                   item.to == ContributorAccount.username)]
                             assert len(contributorList) < 2, "Too many Contributors returned for username " + item.to
                             # TODO: Use more than just the hasFreeEmail feature to determine volunteer status
                             if len(contributorList) == 1 and not contributorList[0].hasFreeEmail:
                                 # Increment count of times this assigner assigned to a commercial dev
                                 # TODO: is it possible that event.author could raise AtrributeError if the author is anonymous?
-                                assigner = self.persistContributor(event.author, project)
+                                assigner = self.persistContributor(event.author, project, "jira")
                                 assigner.assignedToCommercialCount += 1
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
 
-    def persistContributor(self, person, project):
+    def persistContributor(self, person, project, service):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
-        contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
-        if len(contributorList) == 0:
+        # contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
+        # Find out if there is a contributor with the same email or (the same username and service) or (the same name and the same project)
+        contributor = self.session.query(Contributor).join(ContributorProject).join(ContributorAccount).filter(
+            (ContributorAccount.email == contributorEmail) | (
+            (ContributorAccount.username == person.name) & (ContributorAccount.service == service)) | (
+            (ContributorAccount.displayName == person.displayName) & (ContributorProject.project == project))).first()
+
+        if contributor is None:
+            # Persist new entry to contributors table
             LinkedInPage = None
             if args.googlecache is not None:
                 # Try to get LinkedInPage from the cached table
@@ -494,8 +522,7 @@ class JIRADB(object):
                     isRelatedProjectCommitter = True
                     break
 
-            contributor = Contributor(username=person.name, displayName=person.displayName, email=contributorEmail,
-                                      hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
+            contributor = Contributor(hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
                                       issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=ghProfileCompany, hasRelatedEmployer=hasRelatedEmployer,
@@ -504,10 +531,23 @@ class JIRADB(object):
                                       ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location,
                                       BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount)
             self.session.add(contributor)
-        elif len(contributorList) == 1:
-            contributor = contributorList[0]
-        else:
-            raise RuntimeError("Too many Contributors returned for this email.")
+
+        # Find out if this account is stored already
+        contributorAccount = self.session.query(ContributorAccount).filter(
+            ContributorAccount.contributor == contributor, ContributorAccount.username == person.name,
+            ContributorAccount.service == service).first()
+        if contributorAccount is None:
+            # Persist new account
+            contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
+                                                    displayName=person.displayName, email=contributorEmail)
+            self.session.add(contributorAccount)
+
+        # Persist this ContributorProject if not exits
+        contributorProject = self.session.query(ContributorProject).filter(
+            ContributorProject.contributor == contributor, ContributorProject.project == project).first()
+        if contributorProject is None:
+            self.session.add(ContributorProject(contributor=contributor, project=project))
+
         return contributor
 
     def getContributors(self):
