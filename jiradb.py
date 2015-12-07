@@ -307,7 +307,7 @@ class JIRADB(object):
                                 issueAssignment.count += 1
                                 self.session.add(issueAssignment)
                             else:
-                                log.warn('%s assigned % to unknown contributor %s. Ignoring.', event.author, issue.key,
+                                log.warn('%s assigned %s to unknown contributor %s. Ignoring.', event.author, issue.key,
                                          item.to)
 
             self.session.commit()
