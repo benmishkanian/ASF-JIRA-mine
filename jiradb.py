@@ -73,6 +73,17 @@ class Issue(Base):
     resolver = relationship("Contributor", foreign_keys=[__table__.c.resolver_id])
 
 
+class IssueAssignment(Base):
+    __table__ = Table('issueassignments', Base.metadata,
+                      Column('id', Integer, primary_key=True),
+                      Column('assigner_id', Integer, ForeignKey("contributors.id")),
+                      Column('assignee_id', Integer, ForeignKey("contributors.id")),
+                      Column('count', Integer, nullable=False)
+                      )
+    assigner = relationship("Contributor", foreign_keys=[__table__.c.assigner_id])
+    assignee = relationship("Contributor", foreign_keys=[__table__.c.assignee_id])
+
+
 class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
                       Column('id', Integer, primary_key=True),
@@ -80,7 +91,6 @@ class Contributor(Base):
                       Column('hasRelatedCompanyEmail', Boolean, nullable=False),
                       Column('issuesReported', Integer, nullable=False),
                       Column('issuesResolved', Integer, nullable=False),
-                      Column('assignedToCommercialCount', Integer, nullable=False),
                       Column('LinkedInPage', String(128), nullable=True),
                       Column('employer', String(128), nullable=True),
                       Column('ghProfileCompany', VARCHAR(), nullable=True),
@@ -200,7 +210,8 @@ class JIRADB(object):
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         # Refresh declarative schema
-        Base.metadata.drop_all(self.engine, tables=[ContributorAccount.__table__, ContributorProject.__table__])
+        Base.metadata.drop_all(self.engine, tables=[IssueAssignment.__table__, ContributorAccount.__table__,
+                                                    ContributorProject.__table__])
         Base.metadata.drop_all(self.engine, tables=[Issue.__table__, Contributor.__table__])
         Base.metadata.create_all(self.engine)
         for project in projectList:
@@ -265,6 +276,13 @@ class JIRADB(object):
                                  originalPriority=originalPriority,
                                  project=issue.fields.project.key)
                 self.session.add(newIssue)
+
+            log.info('Persisting git contributors...')
+            rows = self.gitdbsession.query(self.gitpeople, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
+                                                                                             self.gitpeople.c.email == self.ghtorrentusers.c.email)
+            for row in rows:
+                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git")
+
             for issue in issuePool:
                 for event in issue.changelog.histories:
                     for item in event.items:
@@ -273,19 +291,22 @@ class JIRADB(object):
                             contributorList = [c for c in
                                                self.session.query(Contributor).join(ContributorAccount).filter(
                                                    ContributorAccount.service == "jira",
-                                                   item.to == ContributorAccount.username)]
+                                                   ContributorAccount.username == item.to)]
                             assert len(contributorList) < 2, "Too many Contributors returned for username " + item.to
-                            # TODO: Use more than just the hasFreeEmail feature to determine volunteer status
-                            if len(contributorList) == 1 and not contributorList[0].hasFreeEmail:
-                                # Increment count of times this assigner assigned to a commercial dev
-                                # TODO: is it possible that event.author could raise AtrributeError if the author is anonymous?
+                            if len(contributorList) == 1:
+                                # Have they assigned to this person before?
+                                # TODO: possible that event.author could raise AtrributeError if author is anonymous?
                                 assigner = self.persistContributor(event.author, project, "jira")
-                                assigner.assignedToCommercialCount += 1
-            log.info('Persisting git contributors...')
-            rows = self.gitdbsession.query(self.gitpeople, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
-                                                                                             self.gitpeople.c.email == self.ghtorrentusers.c.email)
-            for row in rows:
-                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git")
+                                issueAssignment = self.session.query(IssueAssignment).filter(
+                                    IssueAssignment.assigner == assigner,
+                                    IssueAssignment.assignee == contributorList[0]).first()
+                                if issueAssignment is None:
+                                    issueAssignment = IssueAssignment(assigner=assigner, assignee=contributorList[0],
+                                                                      count=0)
+                                # Increment count of times this assigner assigned to this assignee
+                                issueAssignment.count += 1
+                                self.session.add(issueAssignment)
+
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
 
@@ -542,7 +563,7 @@ class JIRADB(object):
                     break
 
             contributor = Contributor(hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
-                                      issuesReported=0, issuesResolved=0, assignedToCommercialCount=0,
+                                      issuesReported=0, issuesResolved=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=ghProfileCompany, hasRelatedEmployer=hasRelatedEmployer,
                                       isRelatedOrgMember=isRelatedOrgMember,
