@@ -26,6 +26,8 @@ except ImportError:
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
 EMAIL_DOMAIN_REGEX = re.compile('.+@(\S+)')
+SCHEMA_REGEX = re.compile('.+/([^/?]+)\?*[^/]*')
+
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
 
@@ -93,8 +95,8 @@ class Contributor(Base):
 
 class ContributorAccount(Base):
     __table__ = Table('contributoraccounts', Base.metadata,
-                      Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False,
-                             primary_key=True),
+                      Column('id', Integer, primary_key=True),
+                      Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False),
                       Column('username', String(64)),
                       Column('service', String(8)),
                       Column('displayName', String(64), nullable=True),
@@ -128,6 +130,13 @@ class CompanyProject(Base):
     company = relationship("Company")
 
 
+class MockPerson(object):
+    def __init__(self, name, displayName, emailAddress):
+        self.name = name
+        self.displayName = displayName
+        self.emailAddress = emailAddress
+
+
 class JIRADB(object):
     def __init__(self, engine):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
@@ -142,21 +151,26 @@ class JIRADB(object):
         GitDBSession = sessionmaker(bind=self.gitdbengine)
         self.gitdbsession = GitDBSession()
         self.gitdbmetadata = MetaData(self.gitdbengine)
-        self.gitlog = Table('scmlog', self.gitdbmetadata, autoload_with=self.gitdbengine)
-        self.gitpeople = Table('people', self.gitdbmetadata, autoload_with=self.gitdbengine)
+        gitdbschema = args.projects[0].lower()
+        self.gitlog = Table('scmlog', self.gitdbmetadata, autoload_with=self.gitdbengine, schema=gitdbschema)
+        self.gitpeople = Table('people', self.gitdbmetadata, autoload_with=self.gitdbengine, schema=gitdbschema)
 
         # DB connection for ghtorrent
         self.ghtorrentengine = create_engine(args.ghtorrentdbstring)
         GHTorrentSession = sessionmaker(bind=self.ghtorrentengine)
         self.ghtorrentsession = GHTorrentSession()
         self.ghtorrentmetadata = MetaData(self.ghtorrentengine)
-        self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
-        self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
+        ghtorrentschema = SCHEMA_REGEX.search(args.ghtorrentdbstring).group(1)
+        self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
+                                       schema=ghtorrentschema)
+        self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
+                                    schema=ghtorrentschema)
         self.ghtorrentorganization_members = Table('organization_members', self.ghtorrentmetadata,
-                                                   autoload_with=self.ghtorrentengine)
+                                                   autoload_with=self.ghtorrentengine, schema=ghtorrentschema)
         self.ghtorrentproject_commits = Table('project_commits', self.ghtorrentmetadata,
-                                              autoload_with=self.ghtorrentengine)
-        self.ghtorrentcommits = Table('commits', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine)
+                                              autoload_with=self.ghtorrentengine, schema=ghtorrentschema)
+        self.ghtorrentcommits = Table('commits', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
+                                      schema=ghtorrentschema)
 
         if args.googlecache is not None:
             # Use the data in the cached table
@@ -267,6 +281,11 @@ class JIRADB(object):
                                 # TODO: is it possible that event.author could raise AtrributeError if the author is anonymous?
                                 assigner = self.persistContributor(event.author, project, "jira")
                                 assigner.assignedToCommercialCount += 1
+            log.info('Persisting git contributors...')
+            rows = self.gitdbsession.query(self.gitpeople, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
+                                                                                             self.gitpeople.c.email == self.ghtorrentusers.c.email)
+            for row in rows:
+                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git")
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
 
@@ -276,10 +295,10 @@ class JIRADB(object):
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         # contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
-        # Find out if there is a contributor with the same email or (the same username and service) or (the same name and the same project)
+        # Find out if there is a contributor with the same email or (the same username and the same project) or (the same name and the same project)
         contributor = self.session.query(Contributor).join(ContributorProject).join(ContributorAccount).filter(
             (ContributorAccount.email == contributorEmail) | (
-            (ContributorAccount.username == person.name) & (ContributorAccount.service == service)) | (
+                (ContributorAccount.username == person.name) & (ContributorProject.project == project)) | (
             (ContributorAccount.displayName == person.displayName) & (ContributorProject.project == project))).first()
 
         if contributor is None:
