@@ -42,9 +42,7 @@ def getArguments():
     parser.add_argument('--dbstring', action='store', default='sqlite:///sqlite.db',
                         help='The database connection string')
     parser.add_argument('--gkeyfile', action='store',
-                        help='File that contains a Google Custom Search API key enciphered by simple-crypt')
-    parser.add_argument('--googlecache', action='store_true', default=False,
-                        help='Use cached Google search results from the googlecache table')
+                        help='File that contains a Google Custom Search API key enciphered by simple-crypt. If not specified, a cache of search results will be used instead.')
     parser.add_argument('--ghusersextended', action='store',
                         help='Table containing the dump of users_data_aggregated_gender.csv')
     parser.add_argument('--ghtorrentdbstring', action='store',
@@ -361,7 +359,7 @@ class JIRADB(object):
             # Persist new entry to contributors table
             # TODO: We only search for LinkedIn page based on the first displayName we get for this contributor. Should search for each displayName encountered.
             LinkedInPage = None
-            if args.googlecache:
+            if args.gkeyfile is None:
                 # Try to get LinkedInPage from the cached table
                 row = self.session.query(GoogleCache).filter(
                     GoogleCache.email == contributorEmail).first()
