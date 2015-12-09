@@ -43,8 +43,8 @@ def getArguments():
                         help='The database connection string')
     parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt')
-    parser.add_argument('--googlecache', action='store',
-                        help='Table containing cached Google Search data')
+    parser.add_argument('--cachegoogle', action='store_true', default=False,
+                        help='Use cached Google search results from the googlecache table')
     parser.add_argument('--ghusersextended', action='store',
                         help='Table containing the dump of users_data_aggregated_gender.csv')
     parser.add_argument('--ghtorrentdbstring', action='store',
@@ -153,6 +153,13 @@ class MockPerson(object):
         self.emailAddress = emailAddress
 
 
+class GoogleCache(Base):
+    __table__ = Table('googlecache', Base.metadata,
+                      Column('email', String(64), primary_key=True),
+                      Column('LinkedInPage', String(128))
+                      )
+
+
 class GitDB(object):
     def __init__(self, project):
         projectLower = project.lower()
@@ -205,9 +212,6 @@ class JIRADB(object):
         self.ghtorrentcommits = Table('commits', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
                                       schema=ghtorrentschema)
 
-        if args.googlecache is not None:
-            # Use the data in the cached table
-            self.cachedContributors = Table(args.googlecache, Base.metadata, autoload_with=self.engine)
         self.googleSearchEnabled = False
         if args.gkeyfile is not None:
             # Enable Google Search
@@ -355,11 +359,12 @@ class JIRADB(object):
 
         if contributor is None:
             # Persist new entry to contributors table
+            # TODO: We only search for LinkedIn page based on the first displayName we get for this contributor. Should search for each displayName encountered.
             LinkedInPage = None
-            if args.googlecache is not None:
+            if args.cachegoogle:
                 # Try to get LinkedInPage from the cached table
-                row = self.session.query(self.cachedContributors).filter(
-                    self.cachedContributors.c.email == contributorEmail).first()
+                row = self.session.query(GoogleCache).filter(
+                    GoogleCache.email == contributorEmail).first()
                 if row is not None:
                     LinkedInPage = row.LinkedInPage
             if (LinkedInPage is None or LinkedInPage == '') and self.googleSearchEnabled:
@@ -374,11 +379,9 @@ class JIRADB(object):
                                                                             searchResults['items'][0][
                                                                                 'link'] or 'linkedin.com/pub/' in
                                                                             searchResults['items'][0]['link']) else None
-                    if args.googlecache is not None:
-                        # Add this new LinkedInPage to the Google search cache table
-                        result = self.engine.execute(self.cachedContributors.insert(), email=contributorEmail,
-                                                     LinkedInPage=LinkedInPage)
-                        result.close()
+
+                    # Add this new LinkedInPage to the Google search cache table
+                    self.session.add(GoogleCache(contributorEmail, LinkedInPage))
                 except HttpError as e:
                     if e.resp['status'] == '403':
                         log.warn('Google search rate limit exceeded. Disabling Google search.')
