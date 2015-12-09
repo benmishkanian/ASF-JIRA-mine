@@ -3,8 +3,11 @@ import logging
 import re
 import getpass
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc
+from subprocess import call
+import os
 
 from github3.null import NullObject
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, aliased
 from sqlalchemy.orm import sessionmaker
@@ -38,8 +41,6 @@ def getArguments():
     parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
     parser.add_argument('--dbstring', action='store', default='sqlite:///sqlite.db',
                         help='The database connection string')
-    parser.add_argument('--gitdbstring', action='store',
-                        help='The connection string for a MySQL database containing a cvsanaly dump', required=True)
     parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt')
     parser.add_argument('--googlecache', action='store',
@@ -50,6 +51,11 @@ def getArguments():
                         help='The connection string for a ghtorrent database', required=True)
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
                         help='Maximum number of results to analyze per Github search')
+    parser.add_argument('--gitdbuser', default='operator',
+                        help='Username for MySQL server containing cvsanaly databases for all projects', )
+    parser.add_argument('--gitdbpass', help='Password for MySQL server containing cvsanaly databases for all projects')
+    parser.add_argument('--gitdbhostname', default='localhost',
+                        help='Hostname for MySQL server containing cvsanaly databases for all projects')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
     return parser.parse_args()
 
@@ -147,6 +153,32 @@ class MockPerson(object):
         self.emailAddress = emailAddress
 
 
+class GitDB(object):
+    def __init__(self, project):
+        projectLower = project.lower()
+        schema = projectLower + '_git'
+        self.engine = create_engine(
+            'mysql+mysqlconnector://{}:{}@{}/{}'.format(args.gitdbuser, args.gitdbpass, args.gitdbhostname, schema))
+        try:
+            self.engine.connect()
+        except ProgrammingError:
+            log.info('Database %s not found. Attemting to clone project repo...', schema)
+            call(['git', 'clone', 'https://github.com/apache/' + projectLower + '.git'])
+            os.chdir(projectLower)
+            log.info('Creating database %s...', schema)
+            call(['mysql', '-u', args.gitdbuser, '--password=' + args.gitdbpass, '-e',
+                  'create database ' + schema + ';'])
+            log.info('Populating database %s using cvsanaly...', schema)
+            call(['cvsanaly2', '--db-user', args.gitdbuser, '--db-password', args.gitdbpass, '--db-database', schema,
+                  '--db-hostname', args.gitdbhostname])
+            os.chdir(os.pardir)
+        Session = sessionmaker(bind=self.engine)
+        self.session = Session()
+        metadata = MetaData(self.engine)
+        self.log = Table('scmlog', metadata, autoload_with=self.engine, schema=schema)
+        self.people = Table('people', metadata, autoload_with=self.engine, schema=schema)
+
+
 class JIRADB(object):
     def __init__(self, engine):
         """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
@@ -155,15 +187,6 @@ class JIRADB(object):
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         Base.metadata.create_all(self.engine)
-
-        # MySQL connection for cvsanaly
-        self.gitdbengine = create_engine(args.gitdbstring)
-        GitDBSession = sessionmaker(bind=self.gitdbengine)
-        self.gitdbsession = GitDBSession()
-        self.gitdbmetadata = MetaData(self.gitdbengine)
-        gitdbschema = args.projects[0].lower()
-        self.gitlog = Table('scmlog', self.gitdbmetadata, autoload_with=self.gitdbengine, schema=gitdbschema)
-        self.gitpeople = Table('people', self.gitdbmetadata, autoload_with=self.gitdbengine, schema=gitdbschema)
 
         # DB connection for ghtorrent
         self.ghtorrentengine = create_engine(args.ghtorrentdbstring)
@@ -206,6 +229,8 @@ class JIRADB(object):
         else:
             log.warn('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
+        if args.gitdbpass is None:
+            args.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -242,12 +267,14 @@ class JIRADB(object):
             jira = JIRA('https://issues.apache.org/jira')
             issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
+            # Get DB containing git data for this project
+            gitDB = GitDB(project)
             log.info("Persisting issues...")
             for issue in issuePool:
                 # Get current priority
                 currentPriority = issue.fields.priority.name
                 # Get reporter
-                reporter = self.persistContributor(issue.fields.reporter, project, "jira")
+                reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
                 reporter.issuesReported += 1
                 # Scan changelog
                 resolver = None
@@ -268,7 +295,7 @@ class JIRADB(object):
                             foundOriginalPriority = True
                 if isResolved:
                     assert resolverJiraObject is not None, "Failed to get resolver for resolved issue " + issue
-                    resolver = self.persistContributor(resolverJiraObject, project, "jira")
+                    resolver = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
                     resolver.issuesResolved += 1
                 # Persist issue
                 newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
@@ -278,10 +305,10 @@ class JIRADB(object):
                 self.session.add(newIssue)
 
             log.info('Persisting git contributors...')
-            rows = self.gitdbsession.query(self.gitpeople, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
-                                                                                             self.gitpeople.c.email == self.ghtorrentusers.c.email)
+            rows = gitDB.session.query(gitDB.people, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
+                                                                                       gitDB.people.c.email == self.ghtorrentusers.c.email)
             for row in rows:
-                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git")
+                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git", gitDB)
 
             for issue in issuePool:
                 for event in issue.changelog.histories:
@@ -297,7 +324,7 @@ class JIRADB(object):
                             if len(contributorList) == 1:
                                 # Have they assigned to this person before?
                                 # TODO: possible that event.author could raise AtrributeError if author is anonymous?
-                                assigner = self.persistContributor(event.author, project, "jira")
+                                assigner = self.persistContributor(event.author, project, "jira", gitDB)
                                 issueAssignment = self.session.query(IssueAssignment).filter(
                                     IssueAssignment.assigner == assigner,
                                     IssueAssignment.assignee == contributorList[0]).first()
@@ -314,7 +341,7 @@ class JIRADB(object):
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
 
-    def persistContributor(self, person, project, service):
+    def persistContributor(self, person, project, service, gitDB):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         contributorEmail = person.emailAddress
         # Convert email format to standard format
@@ -488,15 +515,15 @@ class JIRADB(object):
             BHCommitCount = 0
             NonBHCommitCount = 0
             # match email on git
-            row = self.gitdbsession.query(self.gitpeople).filter(self.gitpeople.c.email == contributorEmail).first()
+            row = gitDB.session.query(gitDB.people).filter(gitDB.people.c.email == contributorEmail).first()
             if row is None:
                 # match name on git
-                row = self.gitdbsession.query(self.gitpeople).filter(
-                    self.gitpeople.c.name == person.displayName).first()
+                row = gitDB.session.query(gitDB.people).filter(
+                    gitDB.people.c.name == person.displayName).first()
             if row is not None:
                 log.debug('Matched %s on git log.', person.displayName)
                 # Find out when they do most of their commits
-                rows = self.gitdbsession.query(self.gitlog).filter(self.gitlog.c.author_id == row.id)
+                rows = gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_id == row.id)
                 for row in rows:
                     t = row.author_date
                     if t.hour > 10 and t.hour < 16:
