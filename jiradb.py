@@ -51,7 +51,7 @@ def getArguments():
                         help='The connection string for a ghtorrent database', required=True)
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
                         help='Maximum number of results to analyze per Github search')
-    parser.add_argument('--gitdbuser', default='operator',
+    parser.add_argument('--gitdbuser', default=getpass.getuser(),
                         help='Username for MySQL server containing cvsanaly databases for all projects', )
     parser.add_argument('--gitdbpass', help='Password for MySQL server containing cvsanaly databases for all projects')
     parser.add_argument('--gitdbhostname', default='localhost',
