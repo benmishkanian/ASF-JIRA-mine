@@ -100,7 +100,7 @@ class IssueAssignment(Base):
 class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
                       Column('id', Integer, primary_key=True),
-                      Column('hasFreeEmail', Boolean, nullable=True),
+                      Column('hasCommercialEmail', Boolean, nullable=True),
                       Column('hasRelatedCompanyEmail', Boolean, nullable=False),
                       Column('issuesReported', Integer, nullable=False),
                       Column('issuesResolved', Integer, nullable=False),
@@ -630,7 +630,8 @@ class JIRADB(object):
                     isRelatedProjectCommitter = True
                     break
 
-            contributor = Contributor(hasFreeEmail=usingPersonalEmail, hasRelatedCompanyEmail=hasRelatedCompanyEmail,
+            contributor = Contributor(hasCommercialEmail=not usingPersonalEmail,
+                                      hasRelatedCompanyEmail=hasRelatedCompanyEmail,
                                       issuesReported=0, issuesResolved=0,
                                       LinkedInPage=LinkedInPage, employer=employer,
                                       ghProfileCompany=ghProfileCompany, hasRelatedEmployer=hasRelatedEmployer,
@@ -649,6 +650,10 @@ class JIRADB(object):
             contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
                                                     displayName=person.displayName, email=contributorEmail)
             self.session.add(contributorAccount)
+            # If this email is commercial, set hasCommercialEmail=True
+            contributor.hasCommercialEmail = True
+            self.session.add(contributor)
+
 
         # Persist this ContributorProject if not exits
         contributorProject = self.session.query(ContributorProject).filter(
@@ -662,7 +667,7 @@ class JIRADB(object):
         return self.session.query(Contributor)
 
     def getVolunteers(self):
-        self.getContributors().filter_by(hasFreeEmail=True)
+        self.getContributors().filter_by(hasCommercialEmail=True)
 
 
 if __name__ == "__main__":
