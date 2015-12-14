@@ -5,6 +5,7 @@ import getpass
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc
 from subprocess import call
 import os
+from datetime import datetime, MAXYEAR, MINYEAR
 
 from github3.null import NullObject
 from sqlalchemy.exc import ProgrammingError
@@ -15,6 +16,11 @@ from jira import JIRA
 import pythonwhois
 from github3 import GitHub, login
 from apiclient.errors import HttpError
+
+import pytz
+
+DATE_FORMAT = '%Y-%m-%d'
+JIRA_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 
 log = logging.getLogger('jiradb')
 
@@ -54,6 +60,8 @@ def getArguments():
     parser.add_argument('--gitdbpass', help='Password for MySQL server containing cvsanaly databases for all projects')
     parser.add_argument('--gitdbhostname', default='localhost',
                         help='Hostname for MySQL server containing cvsanaly databases for all projects')
+    parser.add_argument('--startdate', help='Persist only data points occurring after this date')
+    parser.add_argument('--enddate', help='Persist only data points occurring before this date')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
     return parser.parse_args()
 
@@ -66,7 +74,7 @@ Base = declarative_base(mainEngine)
 class Issue(Base):
     __table__ = Table('issues', Base.metadata,
                       Column('id', Integer, primary_key=True),
-                      Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=False),
+                      Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=True),
                       Column('resolver_id', Integer, ForeignKey("contributors.id"), nullable=True),
                       Column('isResolved', Boolean, nullable=False),
                       Column('originalPriority', String(16), nullable=False),
@@ -82,7 +90,8 @@ class IssueAssignment(Base):
                       Column('id', Integer, primary_key=True),
                       Column('assigner_id', Integer, ForeignKey("contributors.id")),
                       Column('assignee_id', Integer, ForeignKey("contributors.id")),
-                      Column('count', Integer, nullable=False)
+                      Column('count', Integer, nullable=False),
+                      Column('countInWindow', Integer, nullable=False)
                       )
     assigner = relationship("Contributor", foreign_keys=[__table__.c.assigner_id])
     assignee = relationship("Contributor", foreign_keys=[__table__.c.assignee_id])
@@ -210,6 +219,11 @@ class JIRADB(object):
         self.ghtorrentcommits = Table('commits', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
                                       schema=ghtorrentschema)
 
+        self.startDate = pytz.utc.localize(
+            datetime(MINYEAR, 1, 1) if args.startdate is None else datetime.strptime(args.startdate, DATE_FORMAT))
+        self.endDate = pytz.utc.localize(
+            datetime(MAXYEAR, 1, 1) if args.enddate is None else datetime.strptime(args.enddate, DATE_FORMAT))
+
         self.googleSearchEnabled = False
         if args.gkeyfile is not None:
             # Enable Google Search
@@ -273,20 +287,25 @@ class JIRADB(object):
             gitDB = GitDB(project)
             log.info("Persisting issues...")
             for issue in issuePool:
+                # Check if issue was created in the specified time window
+                creationDate = datetime.strptime(issue.fields.created, JIRA_DATE_FORMAT)
+                if self.endDate is not None and creationDate > self.endDate:
+                    log.debug(
+                        'Issue %s created on %s has a creation date after the specified time window and will be skipped.',
+                        issue.key, issue.fields.created)
+                    continue
                 # Get current priority
                 currentPriority = issue.fields.priority.name
-                # Get reporter
-                reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
-                reporter.issuesReported += 1
                 # Scan changelog
-                resolver = None
                 foundOriginalPriority = False
                 originalPriority = currentPriority
                 isResolved = issue.fields.status.name == 'Resolved'
+                resolverJiraObject = None
                 for event in issue.changelog.histories:
                     for item in event.items:
-                        if isResolved and item.field == 'status' and item.toString == 'Resolved':
-                            # Get most recent resolver
+                        eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
+                        if isResolved and item.field == 'status' and item.toString == 'Resolved' and eventDate > self.startDate and eventDate < self.endDate:
+                            # Get most recent resolver in this time window
                             try:
                                 resolverJiraObject = event.author
                             except AttributeError:
@@ -295,16 +314,26 @@ class JIRADB(object):
                             # Get original priority
                             originalPriority = item.fromString
                             foundOriginalPriority = True
-                if isResolved:
-                    assert resolverJiraObject is not None, "Failed to get resolver for resolved issue " + issue
-                    resolver = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
-                    resolver.issuesResolved += 1
-                # Persist issue
-                newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
-                                 currentPriority=currentPriority,
-                                 originalPriority=originalPriority,
-                                 project=issue.fields.project.key)
-                self.session.add(newIssue)
+                # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
+                if resolverJiraObject is not None or creationDate > self.startDate:
+                    # This issue was reported and/or resolved in the window
+                    if creationDate > self.startDate:
+                        reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
+                        reporter.issuesReported += 1
+                    else:
+                        reporter = None
+                    if resolverJiraObject is not None:
+                        resolver = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
+                        resolver.issuesResolved += 1
+                    else:
+                        resolver = None
+
+                    # Persist issue
+                    newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
+                                     currentPriority=currentPriority,
+                                     originalPriority=originalPriority,
+                                     project=issue.fields.project.key)
+                    self.session.add(newIssue)
 
             log.info('Persisting git contributors...')
             rows = gitDB.session.query(gitDB.people, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
@@ -314,6 +343,7 @@ class JIRADB(object):
 
             for issue in issuePool:
                 for event in issue.changelog.histories:
+                    eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
                     for item in event.items:
                         # TODO: do we care when contributors clear the assignee field (i.e. item.to = None)?
                         if item.field == 'assignee' and item.to is not None:
@@ -332,9 +362,12 @@ class JIRADB(object):
                                     IssueAssignment.assignee == contributorList[0]).first()
                                 if issueAssignment is None:
                                     issueAssignment = IssueAssignment(assigner=assigner, assignee=contributorList[0],
-                                                                      count=0)
+                                                                      count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
                                 issueAssignment.count += 1
+                                if eventDate > self.startDate and eventDate < self.endDate:
+                                    # Increment count of times this assigner assigned to this assignee within the window
+                                    issueAssignment.countInWindow += 1
                                 self.session.add(issueAssignment)
                             else:
                                 log.warn('%s assigned %s to unknown contributor %s. Ignoring.', event.author, issue.key,
@@ -523,14 +556,16 @@ class JIRADB(object):
                     gitDB.people.c.name == person.displayName).first()
             if row is not None:
                 log.debug('Matched %s on git log.', person.displayName)
-                # Find out when they do most of their commits
+                # Analyze commits within the window
                 rows = gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_id == row.id)
                 for row in rows:
-                    t = row.author_date
-                    if t.hour > 10 and t.hour < 16:
-                        BHCommitCount += 1
-                    else:
-                        NonBHCommitCount += 1
+                    dt = pytz.utc.localize(row.author_date)  # datetime object
+                    if dt > self.startDate and dt < self.endDate:
+                        # Was this done during typical business hours?
+                        if dt.hour > 10 and dt.hour < 16:
+                            BHCommitCount += 1
+                        else:
+                            NonBHCommitCount += 1
 
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
