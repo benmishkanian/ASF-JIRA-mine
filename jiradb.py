@@ -347,7 +347,7 @@ class JIRADB(object):
                     for item in event.items:
                         # TODO: do we care when contributors clear the assignee field (i.e. item.to = None)?
                         if item.field == 'assignee' and item.to is not None:
-                            # Check if the assignee is a known contributor
+                            # Check if the assignee is a known contributor (may be same as assigner)
                             contributorList = [c for c in
                                                self.session.query(Contributor).join(ContributorAccount).filter(
                                                    ContributorAccount.service == "jira",
@@ -357,11 +357,12 @@ class JIRADB(object):
                                 # Have they assigned to this person before?
                                 # TODO: possible that event.author could raise AtrributeError if author is anonymous?
                                 assigner = self.persistContributor(event.author, project, "jira", gitDB)
+                                assignee = contributorList[0]
                                 issueAssignment = self.session.query(IssueAssignment).filter(
                                     IssueAssignment.assigner == assigner,
-                                    IssueAssignment.assignee == contributorList[0]).first()
+                                    IssueAssignment.assignee == assignee).first()
                                 if issueAssignment is None:
-                                    issueAssignment = IssueAssignment(assigner=assigner, assignee=contributorList[0],
+                                    issueAssignment = IssueAssignment(assigner=assigner, assignee=assignee,
                                                                       count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
                                 issueAssignment.count += 1
