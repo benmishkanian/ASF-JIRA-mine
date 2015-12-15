@@ -19,6 +19,8 @@ from apiclient.errors import HttpError
 
 import pytz
 
+GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
+
 DATE_FORMAT = '%Y-%m-%d'
 JIRA_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 
@@ -49,8 +51,8 @@ def getArguments():
                         help='The database connection string')
     parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt. If not specified, a cache of search results will be used instead.')
-    parser.add_argument('--ghusersextended', action='store',
-                        help='Table containing the dump of users_data_aggregated_gender.csv')
+    parser.add_argument('--ghusersextendeddbstring', action='store',
+                        help='DB connection string for database containing the dump of users_data_aggregated_gender.csv as table ' + GHUSERS_EXTENDED_TABLE)
     parser.add_argument('--ghtorrentdbstring', action='store',
                         help='The connection string for a ghtorrent database', required=True)
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
@@ -235,9 +237,11 @@ class JIRADB(object):
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
-        if args.ghusersextended is not None:
+        if args.ghusersextendeddbstring is not None:
             # Reflect Github account data table
-            self.ghusersextended = Table(args.ghusersextended, Base.metadata, autoload_with=self.engine)
+            ghusersextendeddbengine = create_engine(args.ghusersextendeddbstring)
+            self.ghusersextended = Table(GHUSERS_EXTENDED_TABLE, MetaData(ghusersextendeddbengine),
+                                         autoload_with=ghusersextendeddbengine)
         # Get handle to Github API
         tok = getpass.getpass('Enter Github token:')
         if tok != '':
@@ -442,7 +446,7 @@ class JIRADB(object):
                     rateLimitInfo = self.gh.rate_limit()['resources']
 
             ghMatchedUser = None
-            if args.ghusersextended is not None:
+            if args.ghusersextendeddbstring is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
                 rows = self.session.query(self.ghusersextended).filter(self.ghusersextended.c.email == contributorEmail)
                 for ghAccount in rows:
