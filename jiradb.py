@@ -13,10 +13,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, aliased
 from sqlalchemy.orm import sessionmaker
 from jira import JIRA
+from jira.exceptions import JIRAError
 import pythonwhois
 from github3 import GitHub, login
 from apiclient.errors import HttpError
-
 import pytz
 
 GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
@@ -51,6 +51,7 @@ def getArguments():
                         help='The database connection string')
     parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt. If not specified, a cache of search results will be used instead.')
+    parser.add_argument('--ghtoken', help='A github authentication token')
     parser.add_argument('--ghusersextendeddbstring', action='store',
                         help='DB connection string for database containing the dump of users_data_aggregated_gender.csv as table ' + GHUSERS_EXTENDED_TABLE)
     parser.add_argument('--ghtorrentdbstring', action='store',
@@ -179,7 +180,7 @@ class GitDB(object):
             self.engine.connect()
         except ProgrammingError:
             log.info('Database %s not found. Attemting to clone project repo...', schema)
-            call(['git', 'clone', 'https://github.com/apache/' + projectLower + '.git'])
+            call(['git', 'clone', 'git@github.com:apache/' + projectLower + '.git'])
             os.chdir(projectLower)
             log.info('Creating database %s...', schema)
             call(['mysql', '-u', args.gitdbuser, '--password=' + args.gitdbpass, '-e',
@@ -242,10 +243,12 @@ class JIRADB(object):
             ghusersextendeddbengine = create_engine(args.ghusersextendeddbstring)
             self.ghusersextended = Table(GHUSERS_EXTENDED_TABLE, MetaData(ghusersextendeddbengine),
                                          autoload_with=ghusersextendeddbengine)
+            GHUsersExtendedSession = sessionmaker(bind=ghusersextendeddbengine)
+            self.ghusersextendedsession = GHUsersExtendedSession()
+
         # Get handle to Github API
-        tok = getpass.getpass('Enter Github token:')
-        if tok != '':
-            self.gh = login(token=tok)
+        if args.ghtoken is not None and args.ghtoken != '':
+            self.gh = login(token=(args.ghtoken))
         else:
             log.warn('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
@@ -285,7 +288,11 @@ class JIRADB(object):
             log.info("Scanning project %s...", project)
             scanStartTime = time.time()
             jira = JIRA('https://issues.apache.org/jira')
-            issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+            try:
+                issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+            except JIRAError as e:
+                log.error('Failed to find project %s on JIRA', project)
+                exit(1)
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
             # Get DB containing git data for this project
             gitDB = GitDB(project)
@@ -448,7 +455,8 @@ class JIRADB(object):
             ghMatchedUser = None
             if args.ghusersextendeddbstring is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
-                rows = self.session.query(self.ghusersextended).filter(self.ghusersextended.c.email == contributorEmail)
+                rows = self.ghusersextendedsession.query(self.ghusersextended).filter(
+                    self.ghusersextended.c.email == contributorEmail)
                 for ghAccount in rows:
                     waitForRateLimit('core')
                     potentialUser = self.gh.user(ghAccount.login)
