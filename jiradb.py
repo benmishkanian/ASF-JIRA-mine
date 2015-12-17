@@ -328,16 +328,17 @@ class JIRADB(object):
                 # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
                 if resolverJiraObject is not None or creationDate > self.startDate:
                     # This issue was reported and/or resolved in the window
+                    reporter = None
                     if creationDate > self.startDate:
-                        reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
-                        reporter.issuesReported += 1
-                    else:
-                        reporter = None
+                        if issue.fields.reporter is None:
+                            log.warn('Issue %s was reported by an anonymous user', issue.key)
+                        else:
+                            reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
+                            reporter.issuesReported += 1
+                    resolver = None
                     if resolverJiraObject is not None:
                         resolver = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
                         resolver.issuesResolved += 1
-                    else:
-                        resolver = None
 
                     # Persist issue
                     newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
