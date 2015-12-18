@@ -48,7 +48,7 @@ def getArguments():
     parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
     parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
     parser.add_argument('--dbstring', action='store', default='sqlite:///sqlite.db',
-                        help='The database connection string')
+                        help='The output database connection string')
     parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt. If not specified, a cache of search results will be used instead.')
     parser.add_argument('--ghtoken', help='A github authentication token')
@@ -91,6 +91,7 @@ class Issue(Base):
 class IssueAssignment(Base):
     __table__ = Table('issueassignments', Base.metadata,
                       Column('id', Integer, primary_key=True),
+                      Column('project', String(16), nullable=False),
                       Column('assigner_id', Integer, ForeignKey("contributors.id")),
                       Column('assignee_id', Integer, ForeignKey("contributors.id")),
                       Column('count', Integer, nullable=False),
@@ -371,10 +372,12 @@ class JIRADB(object):
                                 assigner = self.persistContributor(event.author, project, "jira", gitDB)
                                 assignee = contributorList[0]
                                 issueAssignment = self.session.query(IssueAssignment).filter(
+                                    IssueAssignment.project == project,
                                     IssueAssignment.assigner == assigner,
                                     IssueAssignment.assignee == assignee).first()
                                 if issueAssignment is None:
-                                    issueAssignment = IssueAssignment(assigner=assigner, assignee=assignee,
+                                    issueAssignment = IssueAssignment(project=project, assigner=assigner,
+                                                                      assignee=assignee,
                                                                       count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
                                 issueAssignment.count += 1
