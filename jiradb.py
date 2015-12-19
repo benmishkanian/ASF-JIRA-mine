@@ -201,8 +201,11 @@ class GitDB(object):
 
 class JIRADB(object):
     def __init__(self, engine):
-        """Initializes a connection to the database, and creates the necessary tables if they do not already exist."""
-        # Main DB connection
+        """Initializes database connections/resources, and creates the necessary tables if they do not already exist."""
+
+        self.jira = JIRA('https://issues.apache.org/jira')
+
+        # Output DB connection
         self.engine = engine
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
@@ -265,6 +268,7 @@ class JIRADB(object):
                                                     ContributorAccount.__table__])
         Base.metadata.drop_all(self.engine, tables=[Issue.__table__, Contributor.__table__])
         Base.metadata.create_all(self.engine)
+        excludedProjects = []
         for project in projectList:
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
@@ -290,12 +294,12 @@ class JIRADB(object):
 
             log.info("Scanning project %s...", project)
             scanStartTime = time.time()
-            jira = JIRA('https://issues.apache.org/jira')
             try:
-                issuePool = jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+                issuePool = self.jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
             except JIRAError as e:
                 log.error('Failed to find project %s on JIRA', project)
-                exit(1)
+                excludedProjects.append(project)
+                continue
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
             # Get DB containing git data for this project
             gitDB = GitDB(project)
@@ -393,6 +397,7 @@ class JIRADB(object):
 
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
+        log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
 
     def persistContributor(self, person, project, service, gitDB):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
