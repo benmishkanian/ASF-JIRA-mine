@@ -158,8 +158,10 @@ class CompanyProject(Base):
 
 
 class MockPerson(object):
-    def __init__(self, name, displayName, emailAddress):
-        self.name = name
+    """Represents a JIRA user object. Construct this object when username, displayName, and emailAddress are known, but the JIRA user object is not available."""
+
+    def __init__(self, username, displayName, emailAddress):
+        self.name = username
         self.displayName = displayName
         self.emailAddress = emailAddress
 
