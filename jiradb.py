@@ -132,13 +132,13 @@ class ContributorAccount(Base):
     contributor = relationship("Contributor")
 
 
-class ContributorProject(Base):
-    __table__ = Table('contributorprojects', Base.metadata,
-                      Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False,
+class AccountProject(Base):
+    __table__ = Table('accountprojects', Base.metadata,
+                      Column('contributoraccounts_id', Integer, ForeignKey("contributoraccounts.id"), nullable=False,
                              primary_key=True),
-                      Column('project', String(32))
+                      Column('project', String(16))
                       )
-    contributor = relationship("Contributor")
+    account = relationship("ContributorAccount")
 
 
 class Company(Base):
@@ -259,8 +259,8 @@ class JIRADB(object):
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         # Refresh declarative schema
-        Base.metadata.drop_all(self.engine, tables=[IssueAssignment.__table__, ContributorAccount.__table__,
-                                                    ContributorProject.__table__])
+        Base.metadata.drop_all(self.engine, tables=[IssueAssignment.__table__, AccountProject.__table__,
+                                                    ContributorAccount.__table__])
         Base.metadata.drop_all(self.engine, tables=[Issue.__table__, Contributor.__table__])
         Base.metadata.create_all(self.engine)
         for project in projectList:
@@ -398,11 +398,12 @@ class JIRADB(object):
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         # contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
-        # Find out if there is a contributor with the same email or (the same username and the same project) or (the same name and the same project)
-        contributor = self.session.query(Contributor).join(ContributorProject).join(ContributorAccount).filter(
+        # Find out if there is a contributor with an account that has the same email or (the same username and the same project) or (the same name and the same project)
+        contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
             (ContributorAccount.email == contributorEmail) | (
-                (ContributorAccount.username == person.name) & (ContributorProject.project == project)) | (
-            (ContributorAccount.displayName == person.displayName) & (ContributorProject.project == project))).first()
+                (ContributorAccount.username == person.name) & (AccountProject.project == project)) | (
+                (ContributorAccount.displayName == person.displayName) & (AccountProject.project == project))).first()
+        # TODO: it may be good to rank matchings based on what matched (e.g. displayName-only match is low ranking)
 
         if contributor is None:
             # Persist new entry to contributors table
@@ -671,11 +672,11 @@ class JIRADB(object):
             self.session.add(contributor)
 
 
-        # Persist this ContributorProject if not exits
-        contributorProject = self.session.query(ContributorProject).filter(
-            ContributorProject.contributor == contributor, ContributorProject.project == project).first()
-        if contributorProject is None:
-            self.session.add(ContributorProject(contributor=contributor, project=project))
+        # Persist this AccountProject if not exits
+        accountProject = self.session.query(AccountProject).filter(
+            AccountProject.account == contributorAccount, AccountProject.project == project).first()
+        if accountProject is None:
+            self.session.add(AccountProject(account=contributorAccount, project=project))
 
         return contributor
 
