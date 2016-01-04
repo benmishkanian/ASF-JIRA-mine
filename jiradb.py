@@ -31,7 +31,7 @@ try:
 
     canGetEmployers = True
 except ImportError:
-    log.warn('No mechanism available to get employer names.')
+    log.warning('No mechanism available to get employer names.')
     canGetEmployers = False
 
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
@@ -198,19 +198,19 @@ class GitDB(object):
 
 
 class JIRADB(object):
-    def __init__(self, **kwargs):
+    def __init__(self, ghtoken, ghusersextendeddbstring, ghtorrentdbstring, gitdbpass, dbstring='sqlite:///sqlite.db',
+                 gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None, gitdbuser=getpass.getuser(),
+                 gitdbhostname='localhost', **unusedKwargs):
         """Initializes database connections/resources, and creates the necessary tables if they do not already exist."""
-        self.dbstring = kwargs['dbstring']
-        self.gkeyfile = kwargs['gkeyfile']
-        self.ghtoken = kwargs['ghtoken']
-        self.ghusersextendeddbstring = kwargs['ghusersextendeddbstring']
-        self.ghtorrentdbstring = kwargs['ghtorrentdbstring']
-        self.ghscanlimit = kwargs['ghscanlimit']
-        self.gitdbuser = kwargs['gitdbuser']
-        self.gitdbpass = kwargs['gitdbpass']
-        self.gitdbhostname = kwargs['gitdbhostname']
-        self.startdate = kwargs['startdate']
-        self.enddate = kwargs['enddate']
+        self.dbstring = dbstring
+        self.gkeyfile = gkeyfile
+        self.ghtoken = ghtoken
+        self.ghusersextendeddbstring = ghusersextendeddbstring
+        self.ghtorrentdbstring = ghtorrentdbstring
+        self.ghscanlimit = ghscanlimit
+        self.gitdbuser = gitdbuser
+        self.gitdbpass = gitdbpass
+        self.gitdbhostname = gitdbhostname
         self.jira = JIRA('https://issues.apache.org/jira')
 
         # Output DB connection
@@ -237,9 +237,9 @@ class JIRADB(object):
                                       schema=ghtorrentschema)
 
         self.startDate = pytz.utc.localize(
-            datetime(MINYEAR, 1, 1) if self.startdate is None else datetime.strptime(self.startdate, DATE_FORMAT))
+            datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
         self.endDate = pytz.utc.localize(
-            datetime(MAXYEAR, 1, 1) if self.enddate is None else datetime.strptime(self.enddate, DATE_FORMAT))
+            datetime(MAXYEAR, 1, 1) if enddate is None else datetime.strptime(enddate, DATE_FORMAT))
 
         self.googleSearchEnabled = False
         if self.gkeyfile is not None:
@@ -264,7 +264,7 @@ class JIRADB(object):
         if self.ghtoken is not None and self.ghtoken != '':
             self.gh = login(token=(self.ghtoken))
         else:
-            log.warn('Using unauthenticated access to Github API. This will result in severe rate limiting.')
+            log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
         if self.gitdbpass is None:
             self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
@@ -335,7 +335,7 @@ class JIRADB(object):
                             try:
                                 resolverJiraObject = event.author
                             except AttributeError:
-                                log.warn('Issue %s was resolved by an anonymous user', issue.key)
+                                log.warning('Issue %s was resolved by an anonymous user', issue.key)
                         elif not foundOriginalPriority and item.field == 'priority':
                             # Get original priority
                             originalPriority = item.fromString
@@ -346,7 +346,7 @@ class JIRADB(object):
                     reporter = None
                     if creationDate > self.startDate:
                         if issue.fields.reporter is None:
-                            log.warn('Issue %s was reported by an anonymous user', issue.key)
+                            log.warning('Issue %s was reported by an anonymous user', issue.key)
                         else:
                             reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
                             reporter.issuesReported += 1
@@ -400,7 +400,8 @@ class JIRADB(object):
                                     issueAssignment.countInWindow += 1
                                 self.session.add(issueAssignment)
                             else:
-                                log.warn('%s assigned %s to unknown contributor %s. Ignoring.', event.author, issue.key,
+                                log.warning('%s assigned %s to unknown contributor %s. Ignoring.', event.author,
+                                            issue.key,
                                          item.to)
 
             self.session.commit()
@@ -447,7 +448,7 @@ class JIRADB(object):
                     self.session.add(GoogleCache(contributorEmail, LinkedInPage))
                 except HttpError as e:
                     if e.resp['status'] == '403':
-                        log.warn('Google search rate limit exceeded. Disabling Google search.')
+                        log.warning('Google search rate limit exceeded. Disabling Google search.')
                         self.googleSearchEnabled = False
                     else:
                         log.error('Unexpected HttpError while executing Google search "%s"', searchTerm)
@@ -468,7 +469,7 @@ class JIRADB(object):
                 rateLimitInfo = self.gh.rate_limit()['resources']
                 while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
                     waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
-                    log.warn('Waiting %s seconds for Github rate limit...', waitTime)
+                    log.warning('Waiting %s seconds for Github rate limit...', waitTime)
                     time.sleep(waitTime)
                     rateLimitInfo = self.gh.rate_limit()['resources']
 
@@ -563,18 +564,19 @@ class JIRADB(object):
                                              whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
                                     'email'] is not None and 'whoisproxy' in whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
-                    log.warn('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
+                    log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
                     usingPersonalEmail = True
                 except ConnectionResetError as e:
                     # this is probably a rate limit or IP ban, which is typically something only corporations do
-                    log.warn('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
+                    log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
                 except UnicodeDecodeError as e:
-                    log.warn('UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
+                    log.warning(
+                        'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
                              domain, e)
                     usingPersonalEmail = None
                 except Exception as e:
-                    log.warn('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
+                    log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
                              domain, e)
                     usingPersonalEmail = None
 
