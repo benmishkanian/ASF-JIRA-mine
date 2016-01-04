@@ -43,7 +43,7 @@ LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
 
 def getArguments():
-    # Parse script arguments
+    # Parse script arguments. Returns a dict.
     import argparse
     parser = argparse.ArgumentParser(description='Mine ASF JIRA data.')
     parser.add_argument('-c', '--cached', dest='cached', action='store_true', help='Mines data from the caching DB')
@@ -66,12 +66,10 @@ def getArguments():
     parser.add_argument('--startdate', help='Persist only data points occurring after this date')
     parser.add_argument('--enddate', help='Persist only data points occurring before this date')
     parser.add_argument('projects', nargs='+', help='Name of an ASF project (case sensitive)')
-    return parser.parse_args()
+    return vars(parser.parse_args())
 
 
-args = getArguments()
-mainEngine = create_engine(args.dbstring)
-Base = declarative_base(mainEngine)
+Base = declarative_base()
 
 
 class Issue(Base):
@@ -174,11 +172,11 @@ class GoogleCache(Base):
 
 
 class GitDB(object):
-    def __init__(self, project):
+    def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname):
         projectLower = project.lower()
         schema = projectLower + '_git'
         self.engine = create_engine(
-            'mysql+mysqlconnector://{}:{}@{}/{}'.format(args.gitdbuser, args.gitdbpass, args.gitdbhostname, schema))
+            'mysql+mysqlconnector://{}:{}@{}/{}'.format(gitdbuser, gitdbpass, gitdbhostname, schema))
         try:
             self.engine.connect()
         except ProgrammingError:
@@ -186,11 +184,11 @@ class GitDB(object):
             call(['git', 'clone', 'git@github.com:apache/' + projectLower + '.git'])
             os.chdir(projectLower)
             log.info('Creating database %s...', schema)
-            call(['mysql', '-u', args.gitdbuser, '--password=' + args.gitdbpass, '-e',
+            call(['mysql', '-u', gitdbuser, '--password=' + gitdbpass, '-e',
                   'create database ' + schema + ';'])
             log.info('Populating database %s using cvsanaly...', schema)
-            call(['cvsanaly2', '--db-user', args.gitdbuser, '--db-password', args.gitdbpass, '--db-database', schema,
-                  '--db-hostname', args.gitdbhostname])
+            call(['cvsanaly2', '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema,
+                  '--db-hostname', gitdbhostname])
             os.chdir(os.pardir)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
@@ -200,23 +198,33 @@ class GitDB(object):
 
 
 class JIRADB(object):
-    def __init__(self, engine):
+    def __init__(self, **kwargs):
         """Initializes database connections/resources, and creates the necessary tables if they do not already exist."""
-
+        self.dbstring = kwargs['dbstring']
+        self.gkeyfile = kwargs['gkeyfile']
+        self.ghtoken = kwargs['ghtoken']
+        self.ghusersextendeddbstring = kwargs['ghusersextendeddbstring']
+        self.ghtorrentdbstring = kwargs['ghtorrentdbstring']
+        self.ghscanlimit = kwargs['ghscanlimit']
+        self.gitdbuser = kwargs['gitdbuser']
+        self.gitdbpass = kwargs['gitdbpass']
+        self.gitdbhostname = kwargs['gitdbhostname']
+        self.startdate = kwargs['startdate']
+        self.enddate = kwargs['enddate']
         self.jira = JIRA('https://issues.apache.org/jira')
 
         # Output DB connection
-        self.engine = engine
+        self.engine = create_engine(self.dbstring)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         Base.metadata.create_all(self.engine)
 
         # DB connection for ghtorrent
-        self.ghtorrentengine = create_engine(args.ghtorrentdbstring)
+        self.ghtorrentengine = create_engine(self.ghtorrentdbstring)
         GHTorrentSession = sessionmaker(bind=self.ghtorrentengine)
         self.ghtorrentsession = GHTorrentSession()
         self.ghtorrentmetadata = MetaData(self.ghtorrentengine)
-        ghtorrentschema = SCHEMA_REGEX.search(args.ghtorrentdbstring).group(1)
+        ghtorrentschema = SCHEMA_REGEX.search(self.ghtorrentdbstring).group(1)
         self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
                                        schema=ghtorrentschema)
         self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
@@ -229,37 +237,37 @@ class JIRADB(object):
                                       schema=ghtorrentschema)
 
         self.startDate = pytz.utc.localize(
-            datetime(MINYEAR, 1, 1) if args.startdate is None else datetime.strptime(args.startdate, DATE_FORMAT))
+            datetime(MINYEAR, 1, 1) if self.startdate is None else datetime.strptime(self.startdate, DATE_FORMAT))
         self.endDate = pytz.utc.localize(
-            datetime(MAXYEAR, 1, 1) if args.enddate is None else datetime.strptime(args.enddate, DATE_FORMAT))
+            datetime(MAXYEAR, 1, 1) if self.enddate is None else datetime.strptime(self.enddate, DATE_FORMAT))
 
         self.googleSearchEnabled = False
-        if args.gkeyfile is not None:
+        if self.gkeyfile is not None:
             # Enable Google Search
             self.googleSearchEnabled = True
             from simplecrypt import decrypt
             from apiclient.discovery import build
             gpass = getpass.getpass('Enter Google Search key password:')
-            with open(args.gkeyfile, 'rb') as gkeyfilereader:
+            with open(self.gkeyfile, 'rb') as gkeyfilereader:
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
-        if args.ghusersextendeddbstring is not None:
+        if self.ghusersextendeddbstring is not None:
             # Reflect Github account data table
-            ghusersextendeddbengine = create_engine(args.ghusersextendeddbstring)
+            ghusersextendeddbengine = create_engine(self.ghusersextendeddbstring)
             self.ghusersextended = Table(GHUSERS_EXTENDED_TABLE, MetaData(ghusersextendeddbengine),
                                          autoload_with=ghusersextendeddbengine)
             GHUsersExtendedSession = sessionmaker(bind=ghusersextendeddbengine)
             self.ghusersextendedsession = GHUsersExtendedSession()
 
         # Get handle to Github API
-        if args.ghtoken is not None and args.ghtoken != '':
-            self.gh = login(token=(args.ghtoken))
+        if self.ghtoken is not None and self.ghtoken != '':
+            self.gh = login(token=(self.ghtoken))
         else:
             log.warn('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
-        if args.gitdbpass is None:
-            args.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
+        if self.gitdbpass is None:
+            self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -302,7 +310,7 @@ class JIRADB(object):
                 continue
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
             # Get DB containing git data for this project
-            gitDB = GitDB(project)
+            gitDB = GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname)
             log.info("Persisting issues...")
             for issue in issuePool:
                 # Check if issue was created in the specified time window
@@ -416,7 +424,7 @@ class JIRADB(object):
             # Persist new entry to contributors table
             # TODO: We only search for LinkedIn page based on the first displayName we get for this contributor. Should search for each displayName encountered.
             LinkedInPage = None
-            if args.gkeyfile is None:
+            if self.gkeyfile is None:
                 # Try to get LinkedInPage from the cached table
                 row = self.session.query(GoogleCache).filter(
                     GoogleCache.email == contributorEmail).first()
@@ -465,7 +473,7 @@ class JIRADB(object):
                     rateLimitInfo = self.gh.rate_limit()['resources']
 
             ghMatchedUser = None
-            if args.ghusersextendeddbstring is not None:
+            if self.ghusersextendeddbstring is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
                 rows = self.ghusersextendedsession.query(self.ghusersextended).filter(
                     self.ghusersextended.c.email == contributorEmail)
@@ -482,12 +490,12 @@ class JIRADB(object):
                 # Search email prefix on github
                 waitForRateLimit('search')
                 userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
-                if userResults.total_count > args.ghscanlimit:
+                if userResults.total_count > self.ghscanlimit:
                     # Too many results to scan through. Add full name to search.
                     waitForRateLimit('search')
                     userResults = self.gh.search_users(
                         contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
-                    if userResults.total_count > args.ghscanlimit:
+                    if userResults.total_count > self.ghscanlimit:
                         # Still too many results. Add username to search.
                         waitForRateLimit('search')
                         userResults = self.gh.search_users(contributorEmail.split('@')[
@@ -502,7 +510,7 @@ class JIRADB(object):
                         # Found exact match for this email
                         ghMatchedUser = ghUser
                         break
-                    elif userIndex >= args.ghscanlimit:
+                    elif userIndex >= self.ghscanlimit:
                         break
             if ghMatchedUser is None:
                 # Try to find them based on username
@@ -517,7 +525,7 @@ class JIRADB(object):
                         # Found an account with the same username
                         ghMatchedUser = ghUser
                         break
-                    elif userIndex >= args.ghscanlimit:
+                    elif userIndex >= self.ghscanlimit:
                         break
             if ghMatchedUser is None:
                 # Try to find them based on real name
@@ -532,7 +540,7 @@ class JIRADB(object):
                         # Found a person with the same name
                         ghMatchedUser = ghUser
                         break
-                    elif userIndex >= args.ghscanlimit:
+                    elif userIndex >= self.ghscanlimit:
                         break
             # Find out if using a personal email address
             usingPersonalEmail = False
@@ -707,5 +715,6 @@ if __name__ == "__main__":
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
 
-    jiradb = JIRADB(mainEngine)
-    jiradb.persistIssues(args.projects)
+    args = getArguments()
+    jiradb = JIRADB(**args)
+    jiradb.persistIssues(args['projects'])
