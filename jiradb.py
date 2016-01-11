@@ -198,6 +198,7 @@ class GitDB(object):
 
 
 class JIRADB(object):
+    # noinspection PyUnusedLocal
     def __init__(self, ghtoken, ghusersextendeddbstring, ghtorrentdbstring, gitdbpass, dbstring='sqlite:///sqlite.db',
                  gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None, gitdbuser=getpass.getuser(),
                  gitdbhostname='localhost', **unusedKwargs):
@@ -262,7 +263,7 @@ class JIRADB(object):
 
         # Get handle to Github API
         if self.ghtoken is not None and self.ghtoken != '':
-            self.gh = login(token=(self.ghtoken))
+            self.gh = login(token=self.ghtoken)
         else:
             log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
@@ -304,7 +305,7 @@ class JIRADB(object):
             scanStartTime = time.time()
             try:
                 issuePool = self.jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
-            except JIRAError as e:
+            except JIRAError:
                 log.error('Failed to find project %s on JIRA', project)
                 excludedProjects.append(project)
                 continue
@@ -340,7 +341,8 @@ class JIRADB(object):
                             # Get original priority
                             originalPriority = item.fromString
                             foundOriginalPriority = True
-                # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
+                # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported
+                # outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
                 if resolverJiraObject is not None or creationDate > self.startDate:
                     # This issue was reported and/or resolved in the window
                     reporter = None
@@ -402,7 +404,7 @@ class JIRADB(object):
                             else:
                                 log.warning('%s assigned %s to unknown contributor %s. Ignoring.', event.author,
                                             issue.key,
-                                         item.to)
+                                            item.to)
 
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
@@ -413,7 +415,6 @@ class JIRADB(object):
         contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
-        # contributorList = [c for c in self.session.query(Contributor).filter(Contributor.email == contributorEmail)]
         # Find out if there is a contributor with an account that has the same email or (the same username and the same project) or (the same name and the same project)
         contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
             (ContributorAccount.email == contributorEmail) | (
@@ -434,8 +435,8 @@ class JIRADB(object):
             if (LinkedInPage is None or LinkedInPage == '') and self.googleSearchEnabled:
                 # Get LinkedIn page from Google Search
                 searchResults = None
+                searchTerm = '{} {}'.format(person.displayName, project)
                 try:
-                    searchTerm = '{} {}'.format(person.displayName, project)
                     searchResults = self.customSearch.list(q=searchTerm, cx=LINKEDIN_SEARCH_ID).execute()
                     LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
                                                                             'totalResults'] != '0' and (
@@ -555,14 +556,16 @@ class JIRADB(object):
                     whoisInfo = pythonwhois.get_whois(domain)
                     # Also check if they are using the WHOIS obfuscator "whoisproxy"
                     usingPersonalEmail = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
-                                                                          'admin'] is not None and 'admin' in whoisInfo[
-                        'contacts'] and (
+                                                                                   'admin'] is not None and 'admin' in \
+                                                                                                            whoisInfo[
+                                                                                                                'contacts'] and (
                                              'name' in whoisInfo['contacts']['admin'] and
                                              whoisInfo['contacts']['admin']['name'] is not None and
                                              whoisInfo['contacts']['admin'][
                                                  'name'].lower() == person.displayName.lower() or 'email' in
                                              whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
-                                    'email'] is not None and 'whoisproxy' in whoisInfo['contacts']['admin']['email'])
+                                                 'email'] is not None and 'whoisproxy' in
+                                             whoisInfo['contacts']['admin']['email'])
                 except pythonwhois.shared.WhoisException as e:
                     log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
                     # we assume that a corporate domain would have been more reliable than this
@@ -573,11 +576,11 @@ class JIRADB(object):
                 except UnicodeDecodeError as e:
                     log.warning(
                         'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
-                             domain, e)
+                        domain, e)
                     usingPersonalEmail = None
                 except Exception as e:
                     log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
-                             domain, e)
+                                domain, e)
                     usingPersonalEmail = None
 
             # TODO: there could be multiple rows returned?
@@ -650,11 +653,12 @@ class JIRADB(object):
                     self.ghtorrentprojects.c.name == projectName, self.ghtorrentusers.c.login == orgLogin)
 
             isRelatedProjectCommitter = False
-            for orgLogin in relatedOrgLogins:
+            for relatedOrgLogin in relatedOrgLogins:
                 subq = self.ghtorrentsession.query(self.ghtorrentproject_commits,
                                                    self.ghtorrentcommits.c.committer_id).join(
                     self.ghtorrentcommits).filter(
-                    self.ghtorrentproject_commits.c.project_id == getRelatedProjectID(orgLogin, project)).subquery(
+                    self.ghtorrentproject_commits.c.project_id == getRelatedProjectID(relatedOrgLogin,
+                                                                                      project)).subquery(
                     'distinct_committers')
                 committerRows = self.ghtorrentsession.query(subq.c.committer_id.distinct(),
                                                             self.ghtorrentusers.c.name).join(self.ghtorrentusers,
@@ -687,7 +691,6 @@ class JIRADB(object):
             # If this email is commercial, set hasCommercialEmail=True
             contributor.hasCommercialEmail = True
             self.session.add(contributor)
-
 
         # Persist this AccountProject if not exits
         accountProject = self.session.query(AccountProject).filter(
