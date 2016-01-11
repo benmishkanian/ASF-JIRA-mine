@@ -18,6 +18,7 @@ import pythonwhois
 from github3 import GitHub, login
 from apiclient.errors import HttpError
 import pytz
+from requests.exceptions import ConnectionError
 
 GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
 
@@ -467,12 +468,16 @@ class JIRADB(object):
             # Try to get information from Github profile
             def waitForRateLimit(resourceType):
                 """resourceType can be 'search' or 'core'."""
-                rateLimitInfo = self.gh.rate_limit()['resources']
-                while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
-                    waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
-                    log.warning('Waiting %s seconds for Github rate limit...', waitTime)
-                    time.sleep(waitTime)
+                try:
                     rateLimitInfo = self.gh.rate_limit()['resources']
+                    while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
+                        waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
+                        log.warning('Waiting %s seconds for Github rate limit...', waitTime)
+                        time.sleep(waitTime)
+                        rateLimitInfo = self.gh.rate_limit()['resources']
+                except ConnectionError as e:
+                    log.error("Connection error while querying GitHub rate limit. Retrying...")
+                    waitForRateLimit(resourceType)
 
             ghMatchedUser = None
             if self.ghusersextendeddbstring is not None:
