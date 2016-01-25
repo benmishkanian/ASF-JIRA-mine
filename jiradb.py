@@ -79,8 +79,8 @@ class Issue(Base):
                       Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=True),
                       Column('resolver_id', Integer, ForeignKey("contributors.id"), nullable=True),
                       Column('isResolved', Boolean, nullable=False),
-                      Column('originalPriority', String(16), nullable=False),
-                      Column('currentPriority', String(16), nullable=False),
+                      Column('originalPriority', String(16), nullable=True),
+                      Column('currentPriority', String(16), nullable=True),
                       Column('project', String(16), nullable=False)
                       )
     reporter = relationship("Contributor", foreign_keys=[__table__.c.reporter_id])
@@ -323,7 +323,7 @@ class JIRADB(object):
                         issue.key, issue.fields.created)
                     continue
                 # Get current priority
-                currentPriority = issue.fields.priority.name
+                currentPriority = issue.fields.priority.name if issue.fields.priority is not None else None
                 # Scan changelog
                 foundOriginalPriority = False
                 originalPriority = currentPriority
