@@ -447,7 +447,7 @@ class JIRADB(object):
                                                                             searchResults['items'][0]['link']) else None
 
                     # Add this new LinkedInPage to the Google search cache table
-                    self.session.add(GoogleCache(contributorEmail, LinkedInPage))
+                    self.session.add(GoogleCache(email=contributorEmail, LinkedInPage=LinkedInPage))
                 except HttpError as e:
                     if e.resp['status'] == '403':
                         log.warning('Google search rate limit exceeded. Disabling Google search.')
