@@ -103,19 +103,11 @@ class IssueAssignment(Base):
 class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
                       Column('id', Integer, primary_key=True),
-                      Column('hasCommercialEmail', Boolean, nullable=True),
-                      Column('hasRelatedCompanyEmail', Boolean, nullable=False),
-                      Column('issuesReported', Integer, nullable=False),
-                      Column('issuesResolved', Integer, nullable=False),
                       Column('LinkedInPage', String(128), nullable=True),
                       Column('employer', String(128), nullable=True),
+                      Column('ghLogin', String(64), nullable=True),
                       Column('ghProfileCompany', VARCHAR(), nullable=True),
-                      Column('hasRelatedEmployer', Boolean, nullable=False),
-                      Column('isRelatedOrgMember', Boolean, nullable=False),
-                      Column('isRelatedProjectCommitter', Boolean, nullable=False),
-                      Column('ghProfileLocation', VARCHAR(), nullable=True),
-                      Column('BHCommitCount', Integer, nullable=True),
-                      Column('NonBHCommitCount', Integer, nullable=True)
+                      Column('ghProfileLocation', VARCHAR(), nullable=True)
                       )
 
 
@@ -126,7 +118,8 @@ class ContributorAccount(Base):
                       Column('username', String(64)),
                       Column('service', String(8)),
                       Column('displayName', String(64), nullable=True),
-                      Column('email', String(64))
+                      Column('email', String(64)),
+                      Column('hasCommercialEmail', Boolean, nullable=True)
                       )
     contributor = relationship("Contributor")
 
@@ -135,7 +128,15 @@ class AccountProject(Base):
     __table__ = Table('accountprojects', Base.metadata,
                       Column('contributoraccounts_id', Integer, ForeignKey("contributoraccounts.id"), nullable=False,
                              primary_key=True),
-                      Column('project', String(16))
+                      Column('project', String(16)),
+                      Column('hasRelatedCompanyEmail', Boolean, nullable=False),
+                      Column('issuesReported', Integer, nullable=False),
+                      Column('issuesResolved', Integer, nullable=False),
+                      Column('hasRelatedEmployer', Boolean, nullable=False),
+                      Column('isRelatedOrgMember', Boolean, nullable=False),
+                      Column('isRelatedProjectCommitter', Boolean, nullable=False),
+                      Column('BHCommitCount', Integer, nullable=True),
+                      Column('NonBHCommitCount', Integer, nullable=True)
                       )
     account = relationship("ContributorAccount")
 
@@ -273,13 +274,14 @@ class JIRADB(object):
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
-        # Refresh declarative schema
-        Base.metadata.drop_all(self.engine, tables=[IssueAssignment.__table__, AccountProject.__table__,
-                                                    ContributorAccount.__table__])
-        Base.metadata.drop_all(self.engine, tables=[Issue.__table__, Contributor.__table__])
         Base.metadata.create_all(self.engine)
         excludedProjects = []
         for project in projectList:
+            # Delete existing entries for this project related to contribution activity
+            for table in [IssueAssignment, AccountProject, Issue]:
+                log.info("deleted %d entries for project %s",
+                         self.session.query(table).filter(table.project == project).delete(), project)
+
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
                 self.ghtorrentusers.c.login == 'apache',
@@ -352,11 +354,17 @@ class JIRADB(object):
                             log.warning('Issue %s was reported by an anonymous user', issue.key)
                         else:
                             reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
-                            reporter.issuesReported += 1
+                            reporterAccountProject = self.session.query(AccountProject).join(ContributorAccount).filter(
+                                (ContributorAccount.username == issue.fields.reporter.name) & (
+                                ContributorAccount.service == "jira") & (AccountProject.project == project)).first()
+                            reporterAccountProject.issuesReported += 1
                     resolver = None
                     if resolverJiraObject is not None:
                         resolver = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
-                        resolver.issuesResolved += 1
+                        resolverAccountProject = self.session.query(AccountProject).join(ContributorAccount).filter(
+                            (ContributorAccount.username == resolverJiraObject.name) & (
+                            ContributorAccount.service == "jira") & (AccountProject.project == project)).first()
+                        resolverAccountProject.issuesResolved += 1
 
                     # Persist issue
                     newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
@@ -549,6 +557,30 @@ class JIRADB(object):
                         break
                     elif userIndex >= self.ghscanlimit:
                         break
+
+            # TODO: assumes one github account per person
+            if ghMatchedUser is None:
+                ghLogin = None
+                ghProfileCompany = None
+                ghProfileLocation = None
+            else:
+                ghLogin = ghMatchedUser.login
+                ghProfileCompany = ghMatchedUser.company
+                ghProfileLocation = ghMatchedUser.location
+
+            contributor = Contributor(LinkedInPage=LinkedInPage, employer=employer, ghLogin=ghLogin,
+                                      ghProfileCompany=ghProfileCompany,
+                                      ghProfileLocation=ghProfileLocation,
+                                      )
+            self.session.add(contributor)
+
+        # Find out if this account is stored already
+        contributorAccount = self.session.query(ContributorAccount).filter(
+            ContributorAccount.contributor == contributor, ContributorAccount.username == person.name,
+            ContributorAccount.service == service).first()
+        if contributorAccount is None:
+            # Persist new account
+
             # Find out if using a personal email address
             usingPersonalEmail = False
             for volunteerDomain in VOLUNTEER_DOMAINS:
@@ -588,27 +620,19 @@ class JIRADB(object):
                                 domain, e)
                     usingPersonalEmail = None
 
-            # TODO: there could be multiple rows returned?
-            BHCommitCount = 0
-            NonBHCommitCount = 0
-            # match email on git
-            row = gitDB.session.query(gitDB.people).filter(gitDB.people.c.email == contributorEmail).first()
-            if row is None:
-                # match name on git
-                row = gitDB.session.query(gitDB.people).filter(
-                    gitDB.people.c.name == person.displayName).first()
-            if row is not None:
-                log.debug('Matched %s on git log.', person.displayName)
-                # Analyze commits within the window
-                rows = gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_id == row.id)
-                for row in rows:
-                    dt = pytz.utc.localize(row.author_date)  # datetime object
-                    if dt > self.startDate and dt < self.endDate:
-                        # Was this done during typical business hours?
-                        if dt.hour > 10 and dt.hour < 16:
-                            BHCommitCount += 1
-                        else:
-                            NonBHCommitCount += 1
+            contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
+                                                    displayName=person.displayName, email=contributorEmail,
+                                                    hasCommercialEmail=not usingPersonalEmail)
+            self.session.add(contributorAccount)
+            # If this email is commercial, set hasCommercialEmail=True
+            contributor.hasCommercialEmail = True
+            self.session.add(contributor)
+
+        # Persist this AccountProject if not exits
+        accountProject = self.session.query(AccountProject).filter(
+            AccountProject.account == contributorAccount, AccountProject.project == project).first()
+        if accountProject is None:
+            # compute stats for this account on this project
 
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
@@ -626,9 +650,8 @@ class JIRADB(object):
                 CompanyProject.project == project, Company.name != '')
             log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedEmployer = False
-            ghProfileCompany = None if ghMatchedUser is None else ghMatchedUser.company
             for row in rows:
-                if ghProfileCompany is not None and row.name.lower() == ghProfileCompany.lower() or employer is not None and row.name.lower() == employer.lower():
+                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or contributor.employer is not None and row.name.lower() == contributor.employer.lower():
                     hasRelatedEmployer = True
                     break
 
@@ -639,13 +662,13 @@ class JIRADB(object):
 
             # Find out if their github account is a member of an organization that is possibly contributing
             isRelatedOrgMember = False
-            if ghMatchedUser is not None:
+            if contributor.ghLogin is not None:
                 orgusers = aliased(self.ghtorrentusers)
                 rows = self.ghtorrentsession.query(self.ghtorrentorganization_members,
                                                    orgusers.c.login.label('orglogin')).join(self.ghtorrentusers,
                                                                                             self.ghtorrentorganization_members.c.user_id == self.ghtorrentusers.c.id).join(
                     orgusers, self.ghtorrentorganization_members.c.org_id == orgusers.c.id).filter(
-                    self.ghtorrentusers.c.login == ghMatchedUser.login.lower())
+                    self.ghtorrentusers.c.login == contributor.ghLogin)
                 # check if any of those orgs are a possibly contributing org
                 for row in rows:
                     if row.orglogin in relatedOrgLogins:
@@ -673,35 +696,35 @@ class JIRADB(object):
                     isRelatedProjectCommitter = True
                     break
 
-            contributor = Contributor(hasCommercialEmail=not usingPersonalEmail,
-                                      hasRelatedCompanyEmail=hasRelatedCompanyEmail,
-                                      issuesReported=0, issuesResolved=0,
-                                      LinkedInPage=LinkedInPage, employer=employer,
-                                      ghProfileCompany=ghProfileCompany, hasRelatedEmployer=hasRelatedEmployer,
-                                      isRelatedOrgMember=isRelatedOrgMember,
-                                      isRelatedProjectCommitter=isRelatedProjectCommitter,
-                                      ghProfileLocation=None if ghMatchedUser is None else ghMatchedUser.location,
-                                      BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount)
-            self.session.add(contributor)
+            # count (non)business hour commits
+            # TODO: there could be multiple rows returned?
+            BHCommitCount = 0
+            NonBHCommitCount = 0
+            # match email on git
+            row = gitDB.session.query(gitDB.people).filter(gitDB.people.c.email == contributorEmail).first()
+            if row is None:
+                # match name on git
+                row = gitDB.session.query(gitDB.people).filter(
+                    gitDB.people.c.name == person.displayName).first()
+            if row is not None:
+                log.debug('Matched %s on git log.', person.displayName)
+                # Analyze commits within the window
+                rows = gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_id == row.id)
+                for row in rows:
+                    dt = pytz.utc.localize(row.author_date)  # datetime object
+                    if dt > self.startDate and dt < self.endDate:
+                        # Was this done during typical business hours?
+                        if dt.hour > 10 and dt.hour < 16:
+                            BHCommitCount += 1
+                        else:
+                            NonBHCommitCount += 1
 
-        # Find out if this account is stored already
-        contributorAccount = self.session.query(ContributorAccount).filter(
-            ContributorAccount.contributor == contributor, ContributorAccount.username == person.name,
-            ContributorAccount.service == service).first()
-        if contributorAccount is None:
-            # Persist new account
-            contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
-                                                    displayName=person.displayName, email=contributorEmail)
-            self.session.add(contributorAccount)
-            # If this email is commercial, set hasCommercialEmail=True
-            contributor.hasCommercialEmail = True
-            self.session.add(contributor)
-
-        # Persist this AccountProject if not exits
-        accountProject = self.session.query(AccountProject).filter(
-            AccountProject.account == contributorAccount, AccountProject.project == project).first()
-        if accountProject is None:
-            self.session.add(AccountProject(account=contributorAccount, project=project))
+            self.session.add(AccountProject(account=contributorAccount, project=project,
+                                            hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
+                                            issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
+                                            isRelatedOrgMember=isRelatedOrgMember,
+                                            isRelatedProjectCommitter=isRelatedProjectCommitter,
+                                            BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount))
 
         return contributor
 
