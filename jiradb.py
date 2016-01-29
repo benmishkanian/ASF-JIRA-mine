@@ -2,7 +2,7 @@ import time
 import logging
 import re
 import getpass
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc, func
 from subprocess import call
 import os
 from datetime import datetime, MAXYEAR, MINYEAR
@@ -280,7 +280,13 @@ class JIRADB(object):
             # Delete existing entries for this project related to contribution activity
             for table in [IssueAssignment, AccountProject, Issue]:
                 log.info("deleted %d entries for project %s",
-                         self.session.query(table).filter(table.project == project).delete(), project)
+                         self.session.query(table).filter(func.lower(table.project) == func.lower(project)).delete(
+                             synchronize_session='fetch'), project)
+
+            # Delete contributors that have no accounts
+            log.info("deleted %d orphaned contributors", self.session.query(Contributor).filter(
+                ~Contributor.id.in_(self.session.query(ContributorAccount.contributors_id.distinct()))).delete(
+                synchronize_session='fetch'))
 
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
@@ -427,8 +433,10 @@ class JIRADB(object):
         # Find out if there is a contributor with an account that has the same email or (the same username and the same project) or (the same name and the same project)
         contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
             (ContributorAccount.email == contributorEmail) | (
-                (ContributorAccount.username == person.name) & (AccountProject.project == project)) | (
-                (ContributorAccount.displayName == person.displayName) & (AccountProject.project == project))).first()
+                (ContributorAccount.username == person.name) & (
+                func.lower(AccountProject.project) == func.lower(project))) | (
+                (ContributorAccount.displayName == person.displayName) & (
+                func.lower(AccountProject.project) == func.lower(project)))).first()
         # TODO: it may be good to rank matchings based on what matched (e.g. displayName-only match is low ranking)
 
         if contributor is None:
@@ -568,6 +576,7 @@ class JIRADB(object):
                 ghProfileCompany = ghMatchedUser.company
                 ghProfileLocation = ghMatchedUser.location
 
+            log.debug("New contributor %s %s %s", contributorEmail, person.name, person.displayName)
             contributor = Contributor(LinkedInPage=LinkedInPage, employer=employer, ghLogin=ghLogin,
                                       ghProfileCompany=ghProfileCompany,
                                       ghProfileLocation=ghProfileLocation,
@@ -620,6 +629,7 @@ class JIRADB(object):
                                 domain, e)
                     usingPersonalEmail = None
 
+            log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
             contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
                                                     displayName=person.displayName, email=contributorEmail,
                                                     hasCommercialEmail=not usingPersonalEmail)
@@ -630,14 +640,15 @@ class JIRADB(object):
 
         # Persist this AccountProject if not exits
         accountProject = self.session.query(AccountProject).filter(
-            AccountProject.account == contributorAccount, AccountProject.project == project).first()
+            AccountProject.account == contributorAccount,
+            func.lower(AccountProject.project) == func.lower(project)).first()
         if accountProject is None:
             # compute stats for this account on this project
 
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
             rows = self.session.query(CompanyProject, Company.domain).join(Company).filter(
-                CompanyProject.project == project, Company.domain != '')
+                func.lower(CompanyProject.project) == func.lower(project), Company.domain != '')
             log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedCompanyEmail = False
             for row in rows:
@@ -647,7 +658,7 @@ class JIRADB(object):
 
             # Find out if they work at a company that is possibly contributing
             rows = self.session.query(CompanyProject, Company.name).join(Company).filter(
-                CompanyProject.project == project, Company.name != '')
+                func.lower(CompanyProject.project) == func.lower(project), Company.name != '')
             log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedEmployer = False
             for row in rows:
