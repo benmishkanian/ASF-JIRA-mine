@@ -126,8 +126,8 @@ class ContributorAccount(Base):
 
 class AccountProject(Base):
     __table__ = Table('accountprojects', Base.metadata,
-                      Column('contributoraccounts_id', Integer, ForeignKey("contributoraccounts.id"), nullable=False,
-                             primary_key=True),
+                      Column('id', Integer, primary_key=True),
+                      Column('contributoraccounts_id', Integer, ForeignKey("contributoraccounts.id"), nullable=False),
                       Column('project', String(16)),
                       Column('hasRelatedCompanyEmail', Boolean, nullable=False),
                       Column('issuesReported', Integer, nullable=False),
