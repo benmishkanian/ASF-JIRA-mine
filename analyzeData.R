@@ -18,8 +18,12 @@ printDivider <- function() {
     print(paste(replicate(80,"-"), collapse=""))
 }
 
+getDBConnection <- function(dbtype, ...) {
+    if (missing(dbtype)) dbConnect(SQLite(), "sqlite.db") else dbConnect(dbtype, ...)
+}
+
 analyzeData <- function(dbtype, ...) {
-    dbConnection <- if (missing(dbtype)) dbConnect(SQLite(), "sqlite.db") else dbConnect(dbtype, ...)
+    dbConnection <- getDBConnection(dbtype, ...)
     
     reportedByVolunteer <- dbGetQuery(dbConnection, "select contributors.\"hasFreeEmail\" as reportedByVolunteer from issues inner join contributors on issues.reporter_id=contributors.id")
     resolvedByVolunteer <- dbGetQuery(dbConnection, "select contributors.\"hasFreeEmail\" as resolvedByVolunteer from issues inner join contributors on issues.resolver_id=contributors.id")
@@ -73,4 +77,17 @@ analyzeData <- function(dbtype, ...) {
     print(priorityTable)
     
     invisible(dbDisconnect(dbConnection))
+}
+
+usedCommercialEmail <- function(contributorId) {
+    dbGetQuery(dbConnection, paste("select count(*) from contributoraccounts where contributors_id=", contributorId, " and \"hasCommercialEmail\"=True", sep=""))$count > 0
+}
+
+getProjectContributors <- function(project) {
+    dbGetQuery(dbConnection, paste("select distinct contributors.id from contributors inner join contributoraccounts ca on contributors.id=ca.contributors_id inner join accountprojects on ca.id=accountprojects.contributoraccounts_id where upper(project)=upper('", project, "')", sep=""))$id
+}
+
+buildFeatureTable <- function(project) {
+    contributors < getProjectContributors(project)
+    cbind.data.frame(contributors, usedCommercialEmail=vapply(contributors, usedCommercialEmail, TRUE))
 }
