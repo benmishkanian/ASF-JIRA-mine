@@ -283,6 +283,12 @@ class JIRADB(object):
                          self.session.query(table).filter(func.lower(table.project) == func.lower(project)).delete(
                              synchronize_session='fetch'), project)
 
+            # Delete accounts that have no projects
+            log.info("deleted %d orphaned accounts", self.session.query(ContributorAccount).filter(
+                ~ContributorAccount.id.in_(
+                    self.session.query(AccountProject.contributoraccounts_id.distinct()))).delete(
+                synchronize_session='fetch'))
+
             # Delete contributors that have no accounts
             log.info("deleted %d orphaned contributors", self.session.query(Contributor).filter(
                 ~Contributor.id.in_(self.session.query(ContributorAccount.contributors_id.distinct()))).delete(
