@@ -79,8 +79,8 @@ analyzeData <- function(dbtype, ...) {
     invisible(dbDisconnect(dbConnection))
 }
 
-usedCommercialEmail <- function(contributorId) {
-    dbGetQuery(dbConnection, paste("select count(*) from contributoraccounts where contributors_id=", contributorId, " and \"hasCommercialEmail\"=True", sep=""))$count > 0
+usedCommercialEmail <- function(contributorId, project) {
+    dbGetQuery(dbConnection, paste("select count(*) from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", contributorId, " and \"hasCommercialEmail\"=True and upper(project)=upper('", project, "');", sep=""))$count > 0
 }
 
 getProjectContributors <- function(project) {
@@ -88,6 +88,6 @@ getProjectContributors <- function(project) {
 }
 
 buildFeatureTable <- function(project) {
-    contributors < getProjectContributors(project)
-    cbind.data.frame(contributors, usedCommercialEmail=vapply(contributors, usedCommercialEmail, TRUE))
+    projectContributors <- getProjectContributors(project)
+    cbind.data.frame(contributorID=projectContributors, usedCommercialEmail=vapply(projectContributors, usedCommercialEmail, TRUE, project))
 }
