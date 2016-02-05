@@ -97,7 +97,8 @@ buildFeatureTable <- function(project) {
         "\"hasRelatedCompanyEmail\"=True",
         "\"hasRelatedEmployer\"=True",
         "\"isRelatedOrgMember\"=True",
-        "\"isRelatedProjectCommitter\"=True"), featureQueryClosure)
+        "\"isRelatedProjectCommitter\"=True",
+        "\"BHCommitCount\">\"NonBHCommitCount\""), featureQueryClosure)
     
     projectContributors <- getProjectContributors(project)
     getFeatureValues <- function(featureEvaluator) {
@@ -110,6 +111,7 @@ buildFeatureTable <- function(project) {
         "hasRelatedCompanyEmail", 
         "hasRelatedEmployer",
         "isRelatedOrgMember",
-        "isRelatedProjectCommitter")
+        "isRelatedProjectCommitter",
+        "hasMajorityBHCommits")
     featureTable
 }
