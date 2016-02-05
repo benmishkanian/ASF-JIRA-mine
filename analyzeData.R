@@ -91,7 +91,7 @@ buildFeatureTable <- function(project) {
         }
     }
     
-    # generate functions which compute feature values for a given contributorId
+    # generate vector of functions which compute feature values for a given contributorId
     featureEvaluators <- sapply(c(
         "\"hasCommercialEmail\"=True",
         "\"hasRelatedCompanyEmail\"=True",
@@ -101,9 +101,13 @@ buildFeatureTable <- function(project) {
         "\"BHCommitCount\">\"NonBHCommitCount\""), featureQueryClosure)
     
     projectContributors <- getProjectContributors(project)
+    
+    # returns a list of feature values for a given feature evaluator applied to all contributors
     getFeatureValues <- function(featureEvaluator) {
-        vapply(projectContributors, usedCommercialEmail, TRUE)
+        vapply(projectContributors, featureEvaluator, TRUE)
     }
+    
+    # construct the feature table by applying getFeatureValues to each evaluator, and merging these results as columns
     featureTable <- do.call(cbind.data.frame, append(list(projectContributors), lapply(featureEvaluators, getFeatureValues)))
     colnames(featureTable) <- c(
         "contributorId", 
