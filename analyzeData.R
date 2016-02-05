@@ -79,15 +79,37 @@ analyzeData <- function(dbtype, ...) {
     invisible(dbDisconnect(dbConnection))
 }
 
-usedCommercialEmail <- function(contributorId, project) {
-    dbGetQuery(dbConnection, paste("select count(*) from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", contributorId, " and \"hasCommercialEmail\"=True and upper(project)=upper('", project, "');", sep=""))$count > 0
-}
-
 getProjectContributors <- function(project) {
     dbGetQuery(dbConnection, paste("select distinct contributors.id from contributors inner join contributoraccounts ca on contributors.id=ca.contributors_id inner join accountprojects on ca.id=accountprojects.contributoraccounts_id where upper(project)=upper('", project, "')", sep=""))$id
 }
 
 buildFeatureTable <- function(project) {
+    # generates functions for computing feature values in the context of this project
+    featureQueryClosure <- function(featureClause) {
+        function(contributorId) {
+            dbGetQuery(dbConnection, paste("select count(*) from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", contributorId, " and ", featureClause, " and upper(project)=upper('", project, "');", sep=""))$count > 0
+        }
+    }
+    
+    # generate functions which compute feature values for a given contributorId
+    featureEvaluators <- sapply(c(
+        "\"hasCommercialEmail\"=True",
+        "\"hasRelatedCompanyEmail\"=True",
+        "\"hasRelatedEmployer\"=True",
+        "\"isRelatedOrgMember\"=True",
+        "\"isRelatedProjectCommitter\"=True"), featureQueryClosure)
+    
     projectContributors <- getProjectContributors(project)
-    cbind.data.frame(contributorID=projectContributors, usedCommercialEmail=vapply(projectContributors, usedCommercialEmail, TRUE, project))
+    getFeatureValues <- function(featureEvaluator) {
+        vapply(projectContributors, usedCommercialEmail, TRUE)
+    }
+    featureTable <- do.call(cbind.data.frame, append(list(projectContributors), lapply(featureEvaluators, getFeatureValues)))
+    colnames(featureTable) <- c(
+        "contributorId", 
+        "hasCommercialEmail", 
+        "hasRelatedCompanyEmail", 
+        "hasRelatedEmployer",
+        "isRelatedOrgMember",
+        "isRelatedProjectCommitter")
+    featureTable
 }
