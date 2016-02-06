@@ -86,9 +86,11 @@ getProjectContributors <- function(project) {
 buildFeatureTable <- function(project) {
     # generates functions for computing feature values in the context of this project
     featureQueryClosure <- function(featureClause) {
-        function(contributorId) {
+        featureEvaluator <- function(contributorId) {
             dbGetQuery(dbConnection, paste("select count(*) from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", contributorId, " and ", featureClause, " and upper(project)=upper('", project, "');", sep=""))$count > 0
         }
+        attr(featureEvaluator, "featureClause") <- featureClause
+        featureEvaluator
     }
     
     # generate vector of functions which compute feature values for a given contributorId
@@ -109,13 +111,6 @@ buildFeatureTable <- function(project) {
     
     # construct the feature table by applying getFeatureValues to each evaluator, and merging these results as columns
     featureTable <- do.call(cbind.data.frame, append(list(projectContributors), lapply(featureEvaluators, getFeatureValues)))
-    colnames(featureTable) <- c(
-        "contributorId", 
-        "hasCommercialEmail", 
-        "hasRelatedCompanyEmail", 
-        "hasRelatedEmployer",
-        "isRelatedOrgMember",
-        "isRelatedProjectCommitter",
-        "hasMajorityBHCommits")
+    colnames(featureTable) <- c("contributorId", sapply(featureEvaluators, attr, "featureClause"))
     featureTable
 }
