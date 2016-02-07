@@ -103,8 +103,6 @@ class IssueAssignment(Base):
 class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
                       Column('id', Integer, primary_key=True),
-                      Column('LinkedInPage', String(128), nullable=True),
-                      Column('employer', String(128), nullable=True),
                       Column('ghLogin', String(64), nullable=True),
                       Column('ghProfileCompany', VARCHAR(), nullable=True),
                       Column('ghProfileLocation', VARCHAR(), nullable=True)
@@ -129,6 +127,7 @@ class AccountProject(Base):
                       Column('id', Integer, primary_key=True),
                       Column('contributoraccounts_id', Integer, ForeignKey("contributoraccounts.id"), nullable=False),
                       Column('project', String(16)),
+                      Column('LinkedInEmployer', String(128)),
                       Column('hasRelatedCompanyEmail', Boolean, nullable=False),
                       Column('issuesReported', Integer, nullable=False),
                       Column('issuesResolved', Integer, nullable=False),
@@ -168,8 +167,10 @@ class MockPerson(object):
 
 class GoogleCache(Base):
     __table__ = Table('googlecache', Base.metadata,
-                      Column('email', String(64), primary_key=True),
-                      Column('LinkedInPage', String(128))
+                      Column('displayName', String(64), primary_key=True),
+                      Column('project', String(16)),
+                      Column('LinkedInPage', String(128)),
+                      Column('currentEmployer', String(128))
                       )
 
 
@@ -447,45 +448,6 @@ class JIRADB(object):
 
         if contributor is None:
             # Persist new entry to contributors table
-            # TODO: We only search for LinkedIn page based on the first displayName we get for this contributor. Should search for each displayName encountered.
-            LinkedInPage = None
-            if self.gkeyfile is None:
-                # Try to get LinkedInPage from the cached table
-                row = self.session.query(GoogleCache).filter(
-                    GoogleCache.email == contributorEmail).first()
-                if row is not None:
-                    LinkedInPage = row.LinkedInPage
-            if (LinkedInPage is None or LinkedInPage == '') and self.googleSearchEnabled:
-                # Get LinkedIn page from Google Search
-                searchResults = None
-                searchTerm = '{} {}'.format(person.displayName, project)
-                try:
-                    searchResults = self.customSearch.list(q=searchTerm, cx=LINKEDIN_SEARCH_ID).execute()
-                    LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
-                                                                            'totalResults'] != '0' and (
-                                                                            'linkedin.com/in/' in
-                                                                            searchResults['items'][0][
-                                                                                'link'] or 'linkedin.com/pub/' in
-                                                                            searchResults['items'][0]['link']) else None
-
-                    # Add this new LinkedInPage to the Google search cache table
-                    self.session.add(GoogleCache(email=contributorEmail, LinkedInPage=LinkedInPage))
-                except HttpError as e:
-                    if e.resp['status'] == '403':
-                        log.warning('Google search rate limit exceeded. Disabling Google search.')
-                        self.googleSearchEnabled = False
-                    else:
-                        log.error('Unexpected HttpError while executing Google search "%s"', searchTerm)
-                except Exception as e:
-                    log.error('Failed to get LinkedIn URL. Error: %s', e)
-                    log.debug(searchResults)
-            employer = None
-            if LinkedInPage is not None and canGetEmployers:
-                try:
-                    employer = getEmployer(LinkedInPage)
-                except Exception as e:
-                    log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s', person.displayName,
-                             contributorEmail, e)
 
             # Try to get information from Github profile
             def waitForRateLimit(resourceType):
@@ -583,7 +545,7 @@ class JIRADB(object):
                 ghProfileLocation = ghMatchedUser.location
 
             log.debug("New contributor %s %s %s", contributorEmail, person.name, person.displayName)
-            contributor = Contributor(LinkedInPage=LinkedInPage, employer=employer, ghLogin=ghLogin,
+            contributor = Contributor(ghLogin=ghLogin,
                                       ghProfileCompany=ghProfileCompany,
                                       ghProfileLocation=ghProfileLocation,
                                       )
@@ -651,6 +613,48 @@ class JIRADB(object):
         if accountProject is None:
             # compute stats for this account on this project
 
+            # get employer from LinkedIn
+            LinkedInEmployer = None
+            # Try to get LinkedIn information from the Google cache
+            row = self.session.query(GoogleCache).filter(GoogleCache.displayName == person.displayName,
+                                                         GoogleCache.project == project).first()
+            if row is not None:
+                LinkedInEmployer = row.currentEmployer
+            elif self.googleSearchEnabled:
+                # Get LinkedIn page from Google Search
+                searchResults = None
+                searchTerm = '{} {}'.format(person.displayName, project)
+                try:
+                    searchResults = self.customSearch.list(q=searchTerm, cx=LINKEDIN_SEARCH_ID).execute()
+                    LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
+                                                                            'totalResults'] != '0' and (
+                                                                            'linkedin.com/in/' in
+                                                                            searchResults['items'][0][
+                                                                                'link'] or 'linkedin.com/pub/' in
+                                                                            searchResults['items'][0]['link']) else None
+
+                    # get employer from LinkedIn URL using external algorithm
+                    if LinkedInPage is not None and canGetEmployers:
+                        try:
+                            LinkedInEmployer = getEmployer(LinkedInPage)
+                        except Exception as e:
+                            log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s',
+                                     person.displayName,
+                                     contributorEmail, e)
+                    # Add this new LinkedInPage to the Google search cache table
+                    self.session.add(
+                        GoogleCache(displayName=person.displayName, project=project, LinkedInPage=LinkedInPage,
+                                    currentEmployer=LinkedInEmployer))
+                except HttpError as e:
+                    if e.resp['status'] == '403':
+                        log.warning('Google search rate limit exceeded. Disabling Google search.')
+                        self.googleSearchEnabled = False
+                    else:
+                        log.error('Unexpected HttpError while executing Google search "%s"', searchTerm)
+                except Exception as e:
+                    log.error('Failed to get LinkedIn URL. Error: %s', e)
+                    log.debug(searchResults)
+
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
             rows = self.session.query(CompanyProject, Company.domain).join(Company).filter(
@@ -668,7 +672,7 @@ class JIRADB(object):
             log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedEmployer = False
             for row in rows:
-                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or contributor.employer is not None and row.name.lower() == contributor.employer.lower():
+                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or LinkedInEmployer is not None and row.name.lower() == LinkedInEmployer.lower():
                     hasRelatedEmployer = True
                     break
 
@@ -736,7 +740,8 @@ class JIRADB(object):
                         else:
                             NonBHCommitCount += 1
 
-            self.session.add(AccountProject(account=contributorAccount, project=project,
+            self.session.add(
+                AccountProject(account=contributorAccount, project=project, LinkedInEmployer=LinkedInEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
                                             issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
                                             isRelatedOrgMember=isRelatedOrgMember,
