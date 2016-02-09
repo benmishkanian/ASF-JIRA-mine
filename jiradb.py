@@ -614,13 +614,10 @@ class JIRADB(object):
             # compute stats for this account on this project
 
             # get employer from LinkedIn
-            LinkedInEmployer = None
             # Try to get LinkedIn information from the Google cache
-            row = self.session.query(GoogleCache).filter(GoogleCache.displayName == person.displayName,
+            gCacheRow = self.session.query(GoogleCache).filter(GoogleCache.displayName == person.displayName,
                                                          GoogleCache.project == project).first()
-            if row is not None:
-                LinkedInEmployer = row.currentEmployer
-            elif self.googleSearchEnabled:
+            if gCacheRow is None and self.googleSearchEnabled:
                 # Get LinkedIn page from Google Search
                 searchResults = None
                 searchTerm = '{} {}'.format(person.displayName, project)
@@ -633,18 +630,10 @@ class JIRADB(object):
                                                                                 'link'] or 'linkedin.com/pub/' in
                                                                             searchResults['items'][0]['link']) else None
 
-                    # get employer from LinkedIn URL using external algorithm
-                    if LinkedInPage is not None and canGetEmployers:
-                        try:
-                            LinkedInEmployer = getEmployer(LinkedInPage)
-                        except Exception as e:
-                            log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s',
-                                     person.displayName,
-                                     contributorEmail, e)
                     # Add this new LinkedInPage to the Google search cache table
-                    self.session.add(
-                        GoogleCache(displayName=person.displayName, project=project, LinkedInPage=LinkedInPage,
-                                    currentEmployer=LinkedInEmployer))
+                    gCacheRow = GoogleCache(displayName=person.displayName, project=project, LinkedInPage=LinkedInPage,
+                                            currentEmployer=None)
+                    self.session.add(gCacheRow)
                 except HttpError as e:
                     if e.resp['status'] == '403':
                         log.warning('Google search rate limit exceeded. Disabling Google search.')
@@ -654,6 +643,17 @@ class JIRADB(object):
                 except Exception as e:
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
+            # We have a GoogleCache. Does it have currentEmployer?
+            if gCacheRow is not None and gCacheRow.LinkedInPage is not None and gCacheRow.currentEmployer is None and canGetEmployers:
+                log.debug("Getting  employer of %s through LinkedIn URL %s", gCacheRow.displayName,
+                          gCacheRow.LinkedInPage)
+                # get employer from LinkedIn URL using external algorithm
+                try:
+                    gCacheRow.currentEmployer = getEmployer(gCacheRow.LinkedInPage)
+                except Exception as e:
+                    log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s',
+                             person.displayName,
+                             contributorEmail, e)
 
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
@@ -672,7 +672,7 @@ class JIRADB(object):
             log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedEmployer = False
             for row in rows:
-                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or LinkedInEmployer is not None and row.name.lower() == LinkedInEmployer.lower():
+                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or gCacheRow.currentEmployer is not None and row.name.lower() == gCacheRow.currentEmployer.lower():
                     hasRelatedEmployer = True
                     break
 
@@ -741,7 +741,7 @@ class JIRADB(object):
                             NonBHCommitCount += 1
 
             self.session.add(
-                AccountProject(account=contributorAccount, project=project, LinkedInEmployer=LinkedInEmployer,
+                AccountProject(account=contributorAccount, project=project, LinkedInEmployer=gCacheRow.currentEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
                                             issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
                                             isRelatedOrgMember=isRelatedOrgMember,
