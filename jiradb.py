@@ -643,7 +643,7 @@ class JIRADB(object):
                 except Exception as e:
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
-            # We have a GoogleCache. Does it have currentEmployer?
+            # Get employer from GoogleCache row, if we can.
             if gCacheRow is not None and gCacheRow.LinkedInPage is not None and gCacheRow.currentEmployer is None and canGetEmployers:
                 log.debug("Getting  employer of %s through LinkedIn URL %s", gCacheRow.displayName,
                           gCacheRow.LinkedInPage)
@@ -741,7 +741,8 @@ class JIRADB(object):
                             NonBHCommitCount += 1
 
             self.session.add(
-                AccountProject(account=contributorAccount, project=project, LinkedInEmployer=gCacheRow.currentEmployer,
+                AccountProject(account=contributorAccount, project=project,
+                               LinkedInEmployer=None if gCacheRow is None else gCacheRow.currentEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
                                             issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
                                             isRelatedOrgMember=isRelatedOrgMember,
