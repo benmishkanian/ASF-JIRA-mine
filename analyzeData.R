@@ -1,4 +1,5 @@
 library(RSQLite)
+library(e1071)
 
 queryDatabase <- function(query) {
     dbGetQuery(dbConnection, query)
@@ -113,4 +114,21 @@ buildFeatureTable <- function(project) {
     featureTable <- do.call(cbind.data.frame, append(list(projectContributors), lapply(featureEvaluators, getFeatureValues)))
     colnames(featureTable) <- c("contributorId", sapply(featureEvaluators, attr, "featureClause"))
     featureTable
+}
+
+printClassificationWorksheet <- function(project) {
+    identifyingData <- dbGetQuery(dbConnection, paste("select contributors.id as \"contributorId\", \"ghLogin\", username, \"displayName\", email from contributors inner join contributoraccounts on contributors.id=contributoraccounts.contributors_id where contributors.id in (select distinct contributors.id from contributors inner join contributoraccounts ca on contributors.id=ca.contributors_id inner join accountprojects on ca.id=accountprojects.contributoraccounts_id where upper(project)=upper('", project, "')) order by \"contributorId\" asc", sep=""))
+    identifyingData$isCommercial <- NA
+    write.csv(identifyingData, file=paste(project, "worksheet.csv", sep=""), row.names=FALSE)
+}
+
+classifyContributors <- function(project) {
+    # get golden set from classification worksheet
+    worksheet <- read.csv(paste(project, "worksheet.csv", sep = ""))
+    trainingContributors <- worksheet[!is.na(worksheet$isCommercial),c("contributorId", "isCommercial")]
+    featureTable <- buildFeatureTable(project)+0
+    classifiedTable <- merge(featureTable, trainingContributors, by="contributorId")
+    trainingSet <- classifiedTable[,-1]
+    model <- naiveBayes(isCommercial ~ ., data=trainingSet)
+    predict(model, featureTable[,-1]+0)
 }
