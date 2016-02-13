@@ -168,8 +168,8 @@ class MockPerson(object):
 class GoogleCache(Base):
     __table__ = Table('googlecache', Base.metadata,
                       Column('displayName', String(64), primary_key=True),
-                      Column('project', String(16)),
-                      Column('LinkedInPage', String(128)),
+                      Column('project', String(16), primary_key=True),
+                      Column('LinkedInPage', String(128), nullable=False),
                       Column('currentEmployer', String(128))
                       )
 
@@ -644,7 +644,9 @@ class JIRADB(object):
                     log.error('Failed to get LinkedIn URL. Error: %s', e)
                     log.debug(searchResults)
             # Get employer from GoogleCache row, if we can.
-            if gCacheRow is not None and gCacheRow.LinkedInPage is not None and gCacheRow.currentEmployer is None and canGetEmployers:
+            if gCacheRow is not None and gCacheRow.currentEmployer is None and canGetEmployers:
+                assert gCacheRow.LinkedInPage is not None, 'Google cache error: displayName {} for project {} has no LinkedInPage'.format(
+                    gCacheRow.displayName, gCacheRow.project)
                 log.debug("Getting  employer of %s through LinkedIn URL %s", gCacheRow.displayName,
                           gCacheRow.LinkedInPage)
                 # get employer from LinkedIn URL using external algorithm
