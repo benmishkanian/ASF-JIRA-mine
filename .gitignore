@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.idea/*
+analyzePostgres.R
+domains.txt
+getEmployer.py
+googlesearchkey.txt
+*.csv
+*.log
+README.html
+*.db
+__pycache__/*

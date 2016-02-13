@@ -76,28 +76,28 @@ Base = declarative_base()
 class Issue(Base):
     __table__ = Table('issues', Base.metadata,
                       Column('id', Integer, primary_key=True),
-                      Column('reporter_id', Integer, ForeignKey("contributors.id"), nullable=True),
-                      Column('resolver_id', Integer, ForeignKey("contributors.id"), nullable=True),
+                      Column('reporter_id', Integer, ForeignKey("contributoraccounts.id"), nullable=True),
+                      Column('resolver_id', Integer, ForeignKey("contributoraccounts.id"), nullable=True),
                       Column('isResolved', Boolean, nullable=False),
                       Column('originalPriority', String(16), nullable=True),
                       Column('currentPriority', String(16), nullable=True),
                       Column('project', String(16), nullable=False)
                       )
-    reporter = relationship("Contributor", foreign_keys=[__table__.c.reporter_id])
-    resolver = relationship("Contributor", foreign_keys=[__table__.c.resolver_id])
+    reporter = relationship("ContributorAccount", foreign_keys=[__table__.c.reporter_id])
+    resolver = relationship("ContributorAccount", foreign_keys=[__table__.c.resolver_id])
 
 
 class IssueAssignment(Base):
     __table__ = Table('issueassignments', Base.metadata,
                       Column('id', Integer, primary_key=True),
                       Column('project', String(16), nullable=False),
-                      Column('assigner_id', Integer, ForeignKey("contributors.id")),
-                      Column('assignee_id', Integer, ForeignKey("contributors.id")),
+                      Column('assigner_id', Integer, ForeignKey("contributoraccounts.id")),
+                      Column('assignee_id', Integer, ForeignKey("contributoraccounts.id")),
                       Column('count', Integer, nullable=False),
                       Column('countInWindow', Integer, nullable=False)
                       )
-    assigner = relationship("Contributor", foreign_keys=[__table__.c.assigner_id])
-    assignee = relationship("Contributor", foreign_keys=[__table__.c.assignee_id])
+    assigner = relationship("ContributorAccount", foreign_keys=[__table__.c.assigner_id])
+    assignee = relationship("ContributorAccount", foreign_keys=[__table__.c.assignee_id])
 
 
 class Contributor(Base):
@@ -279,16 +279,19 @@ class JIRADB(object):
         excludedProjects = []
         for project in projectList:
             # Delete existing entries for this project related to contribution activity
-            for table in [IssueAssignment, AccountProject, Issue]:
+            for table in [Issue, IssueAssignment, AccountProject]:
                 log.info("deleted %d entries for project %s",
                          self.session.query(table).filter(func.lower(table.project) == func.lower(project)).delete(
                              synchronize_session='fetch'), project)
 
-            # Delete accounts that have no projects
+            # Delete accounts that have no projects and no issues and no issue assignments
             log.info("deleted %d orphaned accounts", self.session.query(ContributorAccount).filter(
-                ~ContributorAccount.id.in_(
-                    self.session.query(AccountProject.contributoraccounts_id.distinct()))).delete(
-                synchronize_session='fetch'))
+                ~ContributorAccount.id.in_(self.session.query(AccountProject.contributoraccounts_id.distinct())),
+                ~ContributorAccount.id.in_(self.session.query(Issue.reporter_id.distinct())),
+                ~ContributorAccount.id.in_(self.session.query(Issue.resolver_id.distinct())),
+                ~ContributorAccount.id.in_(self.session.query(IssueAssignment.assigner_id.distinct())),
+                ~ContributorAccount.id.in_(self.session.query(IssueAssignment.assignee_id.distinct()))
+            ).delete(synchronize_session='fetch'))
 
             # Delete contributors that have no accounts
             log.info("deleted %d orphaned contributors", self.session.query(Contributor).filter(
@@ -361,29 +364,23 @@ class JIRADB(object):
                 # outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
                 if resolverJiraObject is not None or creationDate > self.startDate:
                     # This issue was reported and/or resolved in the window
-                    reporter = None
+                    reporterAccountProject = None
                     if creationDate > self.startDate:
                         if issue.fields.reporter is None:
                             log.warning('Issue %s was reported by an anonymous user', issue.key)
                         else:
-                            reporter = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
-                            reporterAccountProject = self.session.query(AccountProject).join(ContributorAccount).filter(
-                                (ContributorAccount.username == issue.fields.reporter.name) & (
-                                ContributorAccount.service == "jira") & (AccountProject.project == project)).first()
+                            reporterAccountProject = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
                             reporterAccountProject.issuesReported += 1
-                    resolver = None
+                    resolverAccountProject = None
                     if resolverJiraObject is not None:
-                        resolver = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
-                        resolverAccountProject = self.session.query(AccountProject).join(ContributorAccount).filter(
-                            (ContributorAccount.username == resolverJiraObject.name) & (
-                            ContributorAccount.service == "jira") & (AccountProject.project == project)).first()
+                        resolverAccountProject = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
                         resolverAccountProject.issuesResolved += 1
 
                     # Persist issue
-                    newIssue = Issue(reporter=reporter, resolver=resolver, isResolved=isResolved,
+                    newIssue = Issue(reporter=reporterAccountProject, resolver=resolverAccountProject, isResolved=isResolved,
                                      currentPriority=currentPriority,
                                      originalPriority=originalPriority,
-                                     project=issue.fields.project.key)
+                                     project=project)
                     self.session.add(newIssue)
 
             log.info('Persisting git contributors...')
@@ -403,19 +400,23 @@ class JIRADB(object):
                                                self.session.query(Contributor).join(ContributorAccount).filter(
                                                    ContributorAccount.service == "jira",
                                                    ContributorAccount.username == item.to)]
-                            assert len(contributorList) < 2, "Too many Contributors returned for username " + item.to
-                            if len(contributorList) == 1:
-                                # Have they assigned to this person before?
+                            contributorAccountList = [ca for ca in
+                                               self.session.query(ContributorAccount).filter(
+                                                   ContributorAccount.service == "jira",
+                                                   ContributorAccount.username == item.to)]
+                            assert len(contributorAccountList) < 2, "Too many JIRA accounts returned for username " + item.to
+                            if len(contributorAccountList) == 1:
+                                # Increment assignments from this account to the assignee account
                                 # TODO: possible that event.author could raise AtrributeError if author is anonymous?
-                                assigner = self.persistContributor(event.author, project, "jira", gitDB)
-                                assignee = contributorList[0]
+                                assignerAccountProject = self.persistContributor(event.author, project, "jira", gitDB)
+                                assigneeAccount = contributorList[0]
                                 issueAssignment = self.session.query(IssueAssignment).filter(
                                     IssueAssignment.project == project,
-                                    IssueAssignment.assigner == assigner,
-                                    IssueAssignment.assignee == assignee).first()
+                                    IssueAssignment.assigner == assignerAccountProject.contributoraccounts_id,
+                                    IssueAssignment.assignee == assigneeAccount).first()
                                 if issueAssignment is None:
-                                    issueAssignment = IssueAssignment(project=project, assigner=assigner,
-                                                                      assignee=assignee,
+                                    issueAssignment = IssueAssignment(project=project, assigner=assignerAccountProject.contributoraccounts_id,
+                                                                      assignee=assigneeAccount,
                                                                       count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
                                 issueAssignment.count += 1
@@ -742,16 +743,16 @@ class JIRADB(object):
                         else:
                             NonBHCommitCount += 1
 
-            self.session.add(
-                AccountProject(account=contributorAccount, project=project,
+            accountProject = AccountProject(account=contributorAccount, project=project,
                                LinkedInEmployer=None if gCacheRow is None else gCacheRow.currentEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
                                             issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
                                             isRelatedOrgMember=isRelatedOrgMember,
                                             isRelatedProjectCommitter=isRelatedProjectCommitter,
-                                            BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount))
+                                            BHCommitCount=BHCommitCount, NonBHCommitCount=NonBHCommitCount)
+            self.session.add(accountProject)
 
-        return contributor
+        return accountProject
 
     def getContributors(self):
         return self.session.query(Contributor)
