@@ -377,7 +377,7 @@ class JIRADB(object):
                         resolverAccountProject.issuesResolved += 1
 
                     # Persist issue
-                    newIssue = Issue(reporter=reporterAccountProject, resolver=resolverAccountProject, isResolved=isResolved,
+                    newIssue = Issue(reporter=reporterAccountProject.account if reporterAccountProject is not None else None, resolver=resolverAccountProject.account if resolverAccountProject is not None else None, isResolved=isResolved,
                                      currentPriority=currentPriority,
                                      originalPriority=originalPriority,
                                      project=project)
@@ -415,7 +415,7 @@ class JIRADB(object):
                                     IssueAssignment.assigner == assignerAccountProject.contributoraccounts_id,
                                     IssueAssignment.assignee == assigneeAccount).first()
                                 if issueAssignment is None:
-                                    issueAssignment = IssueAssignment(project=project, assigner=assignerAccountProject.contributoraccounts_id,
+                                    issueAssignment = IssueAssignment(project=project, assigner=assignerAccountProject.account,
                                                                       assignee=assigneeAccount,
                                                                       count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
@@ -631,10 +631,11 @@ class JIRADB(object):
                                                                                 'link'] or 'linkedin.com/pub/' in
                                                                             searchResults['items'][0]['link']) else None
 
-                    # Add this new LinkedInPage to the Google search cache table
-                    gCacheRow = GoogleCache(displayName=person.displayName, project=project, LinkedInPage=LinkedInPage,
-                                            currentEmployer=None)
-                    self.session.add(gCacheRow)
+                    if LinkedInPage is not None:
+                        # Add this new LinkedInPage to the Google search cache table
+                        gCacheRow = GoogleCache(displayName=person.displayName, project=project, LinkedInPage=LinkedInPage,
+                                                currentEmployer=None)
+                        self.session.add(gCacheRow)
                 except HttpError as e:
                     if e.resp['status'] == '403':
                         log.warning('Google search rate limit exceeded. Disabling Google search.')
