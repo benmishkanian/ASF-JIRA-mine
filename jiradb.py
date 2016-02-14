@@ -412,7 +412,7 @@ class JIRADB(object):
                                 assigneeAccount = contributorList[0]
                                 issueAssignment = self.session.query(IssueAssignment).filter(
                                     IssueAssignment.project == project,
-                                    IssueAssignment.assigner == assignerAccountProject.contributoraccounts_id,
+                                    IssueAssignment.assigner == assignerAccountProject.account,
                                     IssueAssignment.assignee == assigneeAccount).first()
                                 if issueAssignment is None:
                                     issueAssignment = IssueAssignment(project=project, assigner=assignerAccountProject.account,
