@@ -395,11 +395,7 @@ class JIRADB(object):
                     for item in event.items:
                         # TODO: do we care when contributors clear the assignee field (i.e. item.to = None)?
                         if item.field == 'assignee' and item.to is not None:
-                            # Check if the assignee is a known contributor (may be same as assigner)
-                            contributorList = [c for c in
-                                               self.session.query(Contributor).join(ContributorAccount).filter(
-                                                   ContributorAccount.service == "jira",
-                                                   ContributorAccount.username == item.to)]
+                            # Check if the assignee is using a known account (may be same as assigner's account)
                             contributorAccountList = [ca for ca in
                                                self.session.query(ContributorAccount).filter(
                                                    ContributorAccount.service == "jira",
@@ -409,7 +405,7 @@ class JIRADB(object):
                                 # Increment assignments from this account to the assignee account
                                 # TODO: possible that event.author could raise AtrributeError if author is anonymous?
                                 assignerAccountProject = self.persistContributor(event.author, project, "jira", gitDB)
-                                assigneeAccount = contributorList[0]
+                                assigneeAccount = contributorAccountList[0]
                                 issueAssignment = self.session.query(IssueAssignment).filter(
                                     IssueAssignment.project == project,
                                     IssueAssignment.assigner == assignerAccountProject.account,
@@ -659,6 +655,8 @@ class JIRADB(object):
                              person.displayName,
                              contributorEmail, e)
 
+            LinkedInEmployer=None if gCacheRow is None else gCacheRow.currentEmployer
+
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
             rows = self.session.query(CompanyProject, Company.domain).join(Company).filter(
@@ -676,7 +674,7 @@ class JIRADB(object):
             log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedEmployer = False
             for row in rows:
-                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or gCacheRow.currentEmployer is not None and row.name.lower() == gCacheRow.currentEmployer.lower():
+                if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or LinkedInEmployer is not None and row.name.lower() == LinkedInEmployer.lower():
                     hasRelatedEmployer = True
                     break
 
@@ -745,7 +743,7 @@ class JIRADB(object):
                             NonBHCommitCount += 1
 
             accountProject = AccountProject(account=contributorAccount, project=project,
-                               LinkedInEmployer=None if gCacheRow is None else gCacheRow.currentEmployer,
+                               LinkedInEmployer=LinkedInEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
                                             issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
                                             isRelatedOrgMember=isRelatedOrgMember,
