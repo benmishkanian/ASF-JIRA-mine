@@ -286,17 +286,15 @@ class JIRADB(object):
 
             # Delete accounts that have no projects and no issues and no issue assignments
             log.info("deleted %d orphaned accounts", self.session.query(ContributorAccount).filter(
-                ~ContributorAccount.id.in_(self.session.query(AccountProject.contributoraccounts_id.distinct())),
-                ~ContributorAccount.id.in_(self.session.query(Issue.reporter_id.distinct())),
-                ~ContributorAccount.id.in_(self.session.query(Issue.resolver_id.distinct())),
-                ~ContributorAccount.id.in_(self.session.query(IssueAssignment.assigner_id.distinct())),
-                ~ContributorAccount.id.in_(self.session.query(IssueAssignment.assignee_id.distinct()))
+                ~(self.session.query(AccountProject).filter(AccountProject.contributoraccounts_id == ContributorAccount.id).exists()),
+                ~(self.session.query(Issue).filter((Issue.reporter_id == ContributorAccount.id) | (Issue.resolver_id == ContributorAccount.id)).exists()),
+                ~(self.session.query(IssueAssignment).filter((IssueAssignment.assigner_id == ContributorAccount.id) | (IssueAssignment.assignee_id == ContributorAccount.id)).exists())
             ).delete(synchronize_session='fetch'))
 
             # Delete contributors that have no accounts
             log.info("deleted %d orphaned contributors", self.session.query(Contributor).filter(
-                ~Contributor.id.in_(self.session.query(ContributorAccount.contributors_id.distinct()))).delete(
-                synchronize_session='fetch'))
+                ~(self.session.query(ContributorAccount).filter(ContributorAccount.contributors_id == Contributor.id).exists())
+            ).delete(synchronize_session='fetch'))
 
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
@@ -731,7 +729,7 @@ class JIRADB(object):
                     gitDB.people.c.name == person.displayName).first()
             if row is not None:
                 log.debug('Matched %s on git log.', person.displayName)
-                # Analyze commits within the window
+                # Analyze commits authored within the window
                 rows = gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_id == row.id)
                 for row in rows:
                     dt = pytz.utc.localize(row.author_date)  # datetime object
@@ -742,8 +740,9 @@ class JIRADB(object):
                         else:
                             NonBHCommitCount += 1
 
+            log.debug("Adding new AccountProject for %s account %s on project %s", contributorAccount.service, contributorAccount.username, project)
             accountProject = AccountProject(account=contributorAccount, project=project,
-                               LinkedInEmployer=LinkedInEmployer,
+                                            LinkedInEmployer=LinkedInEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
                                             issuesResolved=0, hasRelatedEmployer=hasRelatedEmployer,
                                             isRelatedOrgMember=isRelatedOrgMember,
@@ -761,7 +760,7 @@ class JIRADB(object):
 
 
 if __name__ == "__main__":
-    log.setLevel(logging.INFO)
+    log.setLevel(logging.DEBUG)
     # Add console log handler
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
