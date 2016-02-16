@@ -129,6 +129,6 @@ classifyContributors <- function(project) {
     featureTable <- buildFeatureTable(project)+0
     classifiedTable <- merge(featureTable, trainingContributors, by="contributorId")
     trainingSet <- classifiedTable[,-1]
-    model <- naiveBayes(isCommercial ~ ., data=trainingSet)
+    model <- naiveBayes(as.factor(isCommercial) ~ ., data=trainingSet)
     predict(model, featureTable[,-1]+0)
 }
