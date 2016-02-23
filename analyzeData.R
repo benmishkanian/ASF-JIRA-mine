@@ -125,10 +125,21 @@ printClassificationWorksheet <- function(project) {
 classifyContributors <- function(project) {
     # get golden set from classification worksheet
     worksheet <- read.csv(paste(project, "worksheet.csv", sep = ""))
+    # refresh contributor IDs, in case database changed
+    worksheet$contributorId <- mapply(getContributorID, worksheet$ghLogin, worksheet$username)
     trainingContributors <- worksheet[!is.na(worksheet$isCommercial),c("contributorId", "isCommercial")]
     featureTable <- buildFeatureTable(project)+0
     classifiedTable <- merge(featureTable, trainingContributors, by="contributorId")
     trainingSet <- classifiedTable[,-1]
     model <- naiveBayes(as.factor(isCommercial) ~ ., data=trainingSet)
     predict(model, featureTable[,-1]+0)
+}
+
+getContributorID <- function(ghUsername, otherUsername) {
+    if (!is.na(ghUsername)) {
+        dbGetQuery(dbConnection, paste("select id from contributors where \"ghLogin\"='", ghUsername, "'", sep = ""))$id
+    } 
+    else {
+        dbGetQuery(dbConnection, paste("select contributors.id from contributors inner join contributoraccounts on contributors.id=contributors_id where username='", otherUsername, "'", sep = ""))$id
+    }
 }
