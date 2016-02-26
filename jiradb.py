@@ -286,14 +286,18 @@ class JIRADB(object):
 
             # Delete accounts that have no projects and no issues and no issue assignments
             log.info("deleted %d orphaned accounts", self.session.query(ContributorAccount).filter(
-                ~(self.session.query(AccountProject).filter(AccountProject.contributoraccounts_id == ContributorAccount.id).exists()),
-                ~(self.session.query(Issue).filter((Issue.reporter_id == ContributorAccount.id) | (Issue.resolver_id == ContributorAccount.id)).exists()),
-                ~(self.session.query(IssueAssignment).filter((IssueAssignment.assigner_id == ContributorAccount.id) | (IssueAssignment.assignee_id == ContributorAccount.id)).exists())
+                ~(self.session.query(AccountProject).filter(
+                    AccountProject.contributoraccounts_id == ContributorAccount.id).exists()),
+                ~(self.session.query(Issue).filter((Issue.reporter_id == ContributorAccount.id) | (
+                    Issue.resolver_id == ContributorAccount.id)).exists()),
+                ~(self.session.query(IssueAssignment).filter((IssueAssignment.assigner_id == ContributorAccount.id) | (
+                    IssueAssignment.assignee_id == ContributorAccount.id)).exists())
             ).delete(synchronize_session='fetch'))
 
             # Delete contributors that have no accounts
             log.info("deleted %d orphaned contributors", self.session.query(Contributor).filter(
-                ~(self.session.query(ContributorAccount).filter(ContributorAccount.contributors_id == Contributor.id).exists())
+                ~(self.session.query(ContributorAccount).filter(
+                    ContributorAccount.contributors_id == Contributor.id).exists())
             ).delete(synchronize_session='fetch'))
 
             apacheProjectCreationDate = self.ghtorrentsession.query(
@@ -367,7 +371,8 @@ class JIRADB(object):
                         if issue.fields.reporter is None:
                             log.warning('Issue %s was reported by an anonymous user', issue.key)
                         else:
-                            reporterAccountProject = self.persistContributor(issue.fields.reporter, project, "jira", gitDB)
+                            reporterAccountProject = self.persistContributor(issue.fields.reporter, project, "jira",
+                                                                             gitDB)
                             reporterAccountProject.issuesReported += 1
                     resolverAccountProject = None
                     if resolverJiraObject is not None:
@@ -375,10 +380,13 @@ class JIRADB(object):
                         resolverAccountProject.issuesResolved += 1
 
                     # Persist issue
-                    newIssue = Issue(reporter=reporterAccountProject.account if reporterAccountProject is not None else None, resolver=resolverAccountProject.account if resolverAccountProject is not None else None, isResolved=isResolved,
-                                     currentPriority=currentPriority,
-                                     originalPriority=originalPriority,
-                                     project=project)
+                    newIssue = Issue(
+                        reporter=reporterAccountProject.account if reporterAccountProject is not None else None,
+                        resolver=resolverAccountProject.account if resolverAccountProject is not None else None,
+                        isResolved=isResolved,
+                        currentPriority=currentPriority,
+                        originalPriority=originalPriority,
+                        project=project)
                     self.session.add(newIssue)
 
             log.info('Persisting git contributors...')
@@ -395,10 +403,11 @@ class JIRADB(object):
                         if item.field == 'assignee' and item.to is not None:
                             # Check if the assignee is using a known account (may be same as assigner's account)
                             contributorAccountList = [ca for ca in
-                                               self.session.query(ContributorAccount).filter(
-                                                   ContributorAccount.service == "jira",
-                                                   ContributorAccount.username == item.to)]
-                            assert len(contributorAccountList) < 2, "Too many JIRA accounts returned for username " + item.to
+                                                      self.session.query(ContributorAccount).filter(
+                                                          ContributorAccount.service == "jira",
+                                                          ContributorAccount.username == item.to)]
+                            assert len(
+                                contributorAccountList) < 2, "Too many JIRA accounts returned for username " + item.to
                             if len(contributorAccountList) == 1:
                                 # Increment assignments from this account to the assignee account
                                 # TODO: possible that event.author could raise AtrributeError if author is anonymous?
@@ -409,7 +418,8 @@ class JIRADB(object):
                                     IssueAssignment.assigner == assignerAccountProject.account,
                                     IssueAssignment.assignee == assigneeAccount).first()
                                 if issueAssignment is None:
-                                    issueAssignment = IssueAssignment(project=project, assigner=assignerAccountProject.account,
+                                    issueAssignment = IssueAssignment(project=project,
+                                                                      assigner=assignerAccountProject.account,
                                                                       assignee=assigneeAccount,
                                                                       count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
@@ -426,6 +436,19 @@ class JIRADB(object):
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
+
+    def waitForRateLimit(self, resourceType):
+        """resourceType can be 'search' or 'core'."""
+        try:
+            rateLimitInfo = self.gh.rate_limit()['resources']
+            while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
+                waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
+                log.warning('Waiting %s seconds for Github rate limit...', waitTime)
+                time.sleep(waitTime)
+                rateLimitInfo = self.gh.rate_limit()['resources']
+        except ConnectionError as e:
+            log.error("Connection error while querying GitHub rate limit. Retrying...")
+            self.waitForRateLimit(resourceType)
 
     def persistContributor(self, person, project, service, gitDB):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
@@ -453,26 +476,13 @@ class JIRADB(object):
             # Persist new entry to contributors table
 
             # Try to get information from Github profile
-            def waitForRateLimit(resourceType):
-                """resourceType can be 'search' or 'core'."""
-                try:
-                    rateLimitInfo = self.gh.rate_limit()['resources']
-                    while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
-                        waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
-                        log.warning('Waiting %s seconds for Github rate limit...', waitTime)
-                        time.sleep(waitTime)
-                        rateLimitInfo = self.gh.rate_limit()['resources']
-                except ConnectionError as e:
-                    log.error("Connection error while querying GitHub rate limit. Retrying...")
-                    waitForRateLimit(resourceType)
-
             ghMatchedUser = None
             if self.ghusersextendeddbstring is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
                 rows = self.ghusersextendedsession.query(self.ghusersextended).filter(
                     self.ghusersextended.c.email == contributorEmail)
                 for ghAccount in rows:
-                    waitForRateLimit('core')
+                    self.waitForRateLimit('core')
                     potentialUser = self.gh.user(ghAccount.login)
                     if not isinstance(potentialUser, NullObject):
                         # valid GitHub username
@@ -482,23 +492,23 @@ class JIRADB(object):
 
             if ghMatchedUser is None:
                 # Search email prefix on github
-                waitForRateLimit('search')
+                self.waitForRateLimit('search')
                 userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
                 if userResults.total_count > self.ghscanlimit:
                     # Too many results to scan through. Add full name to search.
-                    waitForRateLimit('search')
+                    self.waitForRateLimit('search')
                     userResults = self.gh.search_users(
                         contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
                     if userResults.total_count > self.ghscanlimit:
                         # Still too many results. Add username to search.
-                        waitForRateLimit('search')
+                        self.waitForRateLimit('search')
                         userResults = self.gh.search_users(contributorEmail.split('@')[
                                                                0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
                 # Scan search results for an exact email match
                 userIndex = 0
                 for ghUserResult in userResults:
                     userIndex += 1
-                    waitForRateLimit('core')
+                    self.waitForRateLimit('core')
                     ghUser = ghUserResult.user.refresh(True)
                     if ghUser.email.lower() == contributorEmail.lower():
                         # Found exact match for this email
@@ -509,11 +519,11 @@ class JIRADB(object):
             if ghMatchedUser is None:
                 # Try to find them based on username
                 userIndex = 0
-                waitForRateLimit('search')
+                self.waitForRateLimit('search')
                 userResults = self.gh.search_users(person.name + ' in:login')
                 for ghUserResult in userResults:
                     userIndex += 1
-                    waitForRateLimit('core')
+                    self.waitForRateLimit('core')
                     ghUser = ghUserResult.user.refresh(True)
                     if ghUser.login.lower() == person.name.lower():
                         # Found an account with the same username
@@ -524,11 +534,11 @@ class JIRADB(object):
             if ghMatchedUser is None:
                 # Try to find them based on real name
                 userIndex = 0
-                waitForRateLimit('search')
+                self.waitForRateLimit('search')
                 userResults = self.gh.search_users(person.displayName + ' in:fullname')
                 for ghUserResult in userResults:
                     userIndex += 1
-                    waitForRateLimit('core')
+                    self.waitForRateLimit('core')
                     ghUser = ghUserResult.user.refresh(True)
                     if ghUser.name.lower() == person.displayName.lower():
                         # Found a person with the same name
@@ -550,8 +560,7 @@ class JIRADB(object):
             log.debug("New contributor %s %s %s", contributorEmail, person.name, person.displayName)
             contributor = Contributor(ghLogin=ghLogin,
                                       ghProfileCompany=ghProfileCompany,
-                                      ghProfileLocation=ghProfileLocation,
-                                      )
+                                      ghProfileLocation=ghProfileLocation)
             self.session.add(contributor)
 
         # Find out if this account is stored already
@@ -619,7 +628,7 @@ class JIRADB(object):
             # get employer from LinkedIn
             # Try to get LinkedIn information from the Google cache
             gCacheRow = self.session.query(GoogleCache).filter(GoogleCache.displayName == person.displayName,
-                                                         GoogleCache.project == project).first()
+                                                               GoogleCache.project == project).first()
             if gCacheRow is None and self.googleSearchEnabled:
                 # Get LinkedIn page from Google Search
                 searchResults = None
@@ -635,7 +644,8 @@ class JIRADB(object):
 
                     if LinkedInPage is not None:
                         # Add this new LinkedInPage to the Google search cache table
-                        gCacheRow = GoogleCache(displayName=person.displayName, project=project, LinkedInPage=LinkedInPage,
+                        gCacheRow = GoogleCache(displayName=person.displayName, project=project,
+                                                LinkedInPage=LinkedInPage,
                                                 currentEmployer=None)
                         self.session.add(gCacheRow)
                 except HttpError as e:
@@ -661,7 +671,7 @@ class JIRADB(object):
                              person.displayName,
                              contributorEmail, e)
 
-            LinkedInEmployer=None if gCacheRow is None else gCacheRow.currentEmployer
+            LinkedInEmployer = None if gCacheRow is None else gCacheRow.currentEmployer
 
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
@@ -748,7 +758,8 @@ class JIRADB(object):
                         else:
                             NonBHCommitCount += 1
 
-            log.debug("Adding new AccountProject for %s account %s on project %s", contributorAccount.service, contributorAccount.username, project)
+            log.debug("Adding new AccountProject for %s account %s on project %s", contributorAccount.service,
+                      contributorAccount.username, project)
             accountProject = AccountProject(account=contributorAccount, project=project,
                                             LinkedInEmployer=LinkedInEmployer,
                                             hasRelatedCompanyEmail=hasRelatedCompanyEmail, issuesReported=0,
