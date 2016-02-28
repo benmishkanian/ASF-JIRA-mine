@@ -281,6 +281,10 @@ class JIRADB(object):
         self.waitForRateLimit('search')
         return self.gh.search_users(query)
 
+    def refreshGithubUser(self, ghUserObject):
+        self.waitForRateLimit('core')
+        return ghUserObject.refresh(True)
+
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         Base.metadata.create_all(self.engine)
@@ -490,11 +494,10 @@ class JIRADB(object):
                 rows = self.ghusersextendedsession.query(self.ghusersextended).filter(
                     self.ghusersextended.c.email == contributorEmail)
                 for ghAccount in rows:
-                    self.waitForRateLimit('core')
                     potentialUser = self.gh.user(ghAccount.login)
                     if not isinstance(potentialUser, NullObject):
                         # valid GitHub username
-                        ghMatchedUser = potentialUser.refresh(True)
+                        ghMatchedUser = self.refreshGithubUser(potentialUser)
                         log.debug('Matched email %s to GitHub user %s', contributorEmail, ghMatchedUser.name)
                         break
 
@@ -513,14 +516,12 @@ class JIRADB(object):
                 def matchGHUser(userResults, verificationFunction):
                     nonlocal ghMatchedUser
                     if ghMatchedUser is None:
-                        self.waitForRateLimit('search')
                         userIndex = 0
                         while ghMatchedUser is None and userIndex < self.ghscanlimit:
                             try:
                                 ghUserResult = userResults.next()
                                 userIndex += 1
-                                self.waitForRateLimit('core')
-                                ghUser = ghUserResult.user.refresh(True)
+                                ghUser = self.refreshGithubUser(ghUserResult.user)
                                 if verificationFunction(ghUser, person):
                                     ghMatchedUser = ghUser
                             except StopIteration:
