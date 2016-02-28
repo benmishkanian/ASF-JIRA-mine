@@ -70,6 +70,10 @@ def getArguments():
     return vars(parser.parse_args())
 
 
+def equalsIgnoreCase(s1, s2):
+    return s1.lower() == s2.lower()
+
+
 Base = declarative_base()
 
 
@@ -273,6 +277,10 @@ class JIRADB(object):
         if self.gitdbpass is None:
             self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
 
+    def searchGithubUsers(self, query):
+        self.waitForRateLimit('search')
+        return self.gh.search_users(query)
+
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         Base.metadata.create_all(self.engine)
@@ -301,12 +309,12 @@ class JIRADB(object):
             ).delete(synchronize_session='fetch'))
 
             apacheProjectCreationDate = self.ghtorrentsession.query(
-                self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers).filter(
+                self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
                 self.ghtorrentusers.c.login == 'apache',
                 self.ghtorrentprojects.c.name == project).first().project_creation_date
             # TODO: may fail to find creation date
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
-            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers).add_columns(
+            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
                 self.ghtorrentusers.c.login, self.ghtorrentusers.c.name.label('company_name'),
                 self.ghtorrentusers.c.email).filter(self.ghtorrentusers.c.type == 'ORG',
                                                     self.ghtorrentprojects.c.name == project,
@@ -492,60 +500,38 @@ class JIRADB(object):
 
             if ghMatchedUser is None:
                 # Search email prefix on github
-                self.waitForRateLimit('search')
-                userResults = self.gh.search_users(contributorEmail.split('@')[0] + ' in:email')
+                userResults = self.searchGithubUsers(contributorEmail.split('@')[0] + ' in:email')
                 if userResults.total_count > self.ghscanlimit:
                     # Too many results to scan through. Add full name to search.
-                    self.waitForRateLimit('search')
-                    userResults = self.gh.search_users(
+                    userResults = self.searchGithubUsers(
                         contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
                     if userResults.total_count > self.ghscanlimit:
                         # Still too many results. Add username to search.
-                        self.waitForRateLimit('search')
-                        userResults = self.gh.search_users(contributorEmail.split('@')[
+                        userResults = self.searchGithubUsers(contributorEmail.split('@')[
                                                                0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
-                # Scan search results for an exact email match
-                userIndex = 0
-                for ghUserResult in userResults:
-                    userIndex += 1
-                    self.waitForRateLimit('core')
-                    ghUser = ghUserResult.user.refresh(True)
-                    if ghUser.email.lower() == contributorEmail.lower():
-                        # Found exact match for this email
-                        ghMatchedUser = ghUser
-                        break
-                    elif userIndex >= self.ghscanlimit:
-                        break
-            if ghMatchedUser is None:
-                # Try to find them based on username
-                userIndex = 0
-                self.waitForRateLimit('search')
-                userResults = self.gh.search_users(person.name + ' in:login')
-                for ghUserResult in userResults:
-                    userIndex += 1
-                    self.waitForRateLimit('core')
-                    ghUser = ghUserResult.user.refresh(True)
-                    if ghUser.login.lower() == person.name.lower():
-                        # Found an account with the same username
-                        ghMatchedUser = ghUser
-                        break
-                    elif userIndex >= self.ghscanlimit:
-                        break
-            if ghMatchedUser is None:
-                # Try to find them based on real name
-                userIndex = 0
-                self.waitForRateLimit('search')
-                userResults = self.gh.search_users(person.displayName + ' in:fullname')
-                for ghUserResult in userResults:
-                    userIndex += 1
-                    self.waitForRateLimit('core')
-                    ghUser = ghUserResult.user.refresh(True)
-                    if ghUser.name.lower() == person.displayName.lower():
-                        # Found a person with the same name
-                        ghMatchedUser = ghUser
-                        break
-                    elif userIndex >= self.ghscanlimit:
-                        break
+
+                def matchGHUser(userResults, verificationFunction):
+                    nonlocal ghMatchedUser
+                    if ghMatchedUser is None:
+                        self.waitForRateLimit('search')
+                        userIndex = 0
+                        while ghMatchedUser is None and userIndex < self.ghscanlimit:
+                            try:
+                                ghUserResult = userResults.next()
+                                userIndex += 1
+                                self.waitForRateLimit('core')
+                                ghUser = ghUserResult.user.refresh(True)
+                                if verificationFunction(ghUser, person):
+                                    ghMatchedUser = ghUser
+                            except StopIteration:
+                                break
+
+                # Try matching based on email
+                matchGHUser(userResults, lambda ghUser, person: equalsIgnoreCase(ghUser.email, contributorEmail))
+                # Try matching based on username
+                matchGHUser(self.searchGithubUsers(person.name + ' in:login'), lambda ghUser, person: equalsIgnoreCase(ghUser.login, person.name))
+                # Try matching based on displayName
+                matchGHUser(self.searchGithubUsers(person.displayName + ' in:fullname'), lambda ghUser, person: equalsIgnoreCase(ghUser.name, person.displayName))
 
             # TODO: assumes one github account per person
             if ghMatchedUser is None:
@@ -716,14 +702,14 @@ class JIRADB(object):
 
             # Find out if they committed to a related project
             def getRelatedProjectID(orgLogin, projectName):
-                return self.ghtorrentsession.query(self.ghtorrentprojects.c.id).join(self.ghtorrentusers).filter(
+                return self.ghtorrentsession.query(self.ghtorrentprojects.c.id).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
                     self.ghtorrentprojects.c.name == projectName, self.ghtorrentusers.c.login == orgLogin)
 
             isRelatedProjectCommitter = False
             for relatedOrgLogin in relatedOrgLogins:
                 subq = self.ghtorrentsession.query(self.ghtorrentproject_commits,
                                                    self.ghtorrentcommits.c.committer_id).join(
-                    self.ghtorrentcommits).filter(
+                    self.ghtorrentcommits, self.ghtorrentproject_commits.c.commit_id == self.ghtorrentcommits.c.id).filter(
                     self.ghtorrentproject_commits.c.project_id == getRelatedProjectID(relatedOrgLogin,
                                                                                       project)).subquery(
                     'distinct_committers')
