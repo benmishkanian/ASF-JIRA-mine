@@ -177,6 +177,12 @@ class GoogleCache(Base):
                       Column('currentEmployer', String(128))
                       )
 
+def TableReflector(engine, schema):
+    metadata = MetaData(engine)
+    def reflectTable(tableName):
+        nonlocal engine, metadata, schema
+        return Table(tableName, metadata, autoload_with=engine, schema=schema)
+    return reflectTable
 
 class GitDB(object):
     def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname):
@@ -199,9 +205,9 @@ class GitDB(object):
             os.chdir(os.pardir)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
-        metadata = MetaData(self.engine)
-        self.log = Table('scmlog', metadata, autoload_with=self.engine, schema=schema)
-        self.people = Table('people', metadata, autoload_with=self.engine, schema=schema)
+        gitdbTable = TableReflector(self.engine, schema)
+        self.log = gitdbTable('scmlog')
+        self.people = gitdbTable('people')
 
 
 class JIRADB(object):
@@ -228,21 +234,15 @@ class JIRADB(object):
         Base.metadata.create_all(self.engine)
 
         # DB connection for ghtorrent
-        self.ghtorrentengine = create_engine(self.ghtorrentdbstring)
-        GHTorrentSession = sessionmaker(bind=self.ghtorrentengine)
+        ghtorrentengine = create_engine(self.ghtorrentdbstring)
+        GHTorrentSession = sessionmaker(bind=ghtorrentengine)
         self.ghtorrentsession = GHTorrentSession()
-        self.ghtorrentmetadata = MetaData(self.ghtorrentengine)
-        ghtorrentschema = SCHEMA_REGEX.search(self.ghtorrentdbstring).group(1)
-        self.ghtorrentprojects = Table('projects', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
-                                       schema=ghtorrentschema)
-        self.ghtorrentusers = Table('users', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
-                                    schema=ghtorrentschema)
-        self.ghtorrentorganization_members = Table('organization_members', self.ghtorrentmetadata,
-                                                   autoload_with=self.ghtorrentengine, schema=ghtorrentschema)
-        self.ghtorrentproject_commits = Table('project_commits', self.ghtorrentmetadata,
-                                              autoload_with=self.ghtorrentengine, schema=ghtorrentschema)
-        self.ghtorrentcommits = Table('commits', self.ghtorrentmetadata, autoload_with=self.ghtorrentengine,
-                                      schema=ghtorrentschema)
+        ghtTable = TableReflector(ghtorrentengine, SCHEMA_REGEX.search(self.ghtorrentdbstring).group(1))
+        self.ghtorrentprojects = ghtTable('projects')
+        self.ghtorrentusers = ghtTable('users')
+        self.ghtorrentorganization_members = ghtTable('organization_members')
+        self.ghtorrentproject_commits = ghtTable('project_commits')
+        self.ghtorrentcommits = ghtTable('commits')
 
         self.startDate = pytz.utc.localize(
             datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
