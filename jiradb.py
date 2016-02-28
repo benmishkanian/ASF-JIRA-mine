@@ -285,6 +285,9 @@ class JIRADB(object):
         self.waitForRateLimit('core')
         return ghUserObject.refresh(True)
 
+    def deleteRows(self, table, *filterArgs):
+        return self.session.query(table).filter(*filterArgs).delete(synchronize_session='fetch')
+
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         Base.metadata.create_all(self.engine)
@@ -293,24 +296,21 @@ class JIRADB(object):
             # Delete existing entries for this project related to contribution activity
             for table in [Issue, IssueAssignment, AccountProject]:
                 log.info("deleted %d entries for project %s",
-                         self.session.query(table).filter(func.lower(table.project) == func.lower(project)).delete(
-                             synchronize_session='fetch'), project)
+                         self.deleteRows(table, func.lower(table.project) == func.lower(project)), project)
 
             # Delete accounts that have no projects and no issues and no issue assignments
-            log.info("deleted %d orphaned accounts", self.session.query(ContributorAccount).filter(
+            log.info("deleted %d orphaned accounts", self.deleteRows(ContributorAccount,
                 ~(self.session.query(AccountProject).filter(
                     AccountProject.contributoraccounts_id == ContributorAccount.id).exists()),
                 ~(self.session.query(Issue).filter((Issue.reporter_id == ContributorAccount.id) | (
                     Issue.resolver_id == ContributorAccount.id)).exists()),
                 ~(self.session.query(IssueAssignment).filter((IssueAssignment.assigner_id == ContributorAccount.id) | (
-                    IssueAssignment.assignee_id == ContributorAccount.id)).exists())
-            ).delete(synchronize_session='fetch'))
+                    IssueAssignment.assignee_id == ContributorAccount.id)).exists())))
 
             # Delete contributors that have no accounts
-            log.info("deleted %d orphaned contributors", self.session.query(Contributor).filter(
+            log.info("deleted %d orphaned contributors", self.deleteRows(Contributor,
                 ~(self.session.query(ContributorAccount).filter(
-                    ContributorAccount.contributors_id == Contributor.id).exists())
-            ).delete(synchronize_session='fetch'))
+                    ContributorAccount.contributors_id == Contributor.id).exists())))
 
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
