@@ -301,6 +301,34 @@ class JIRADB(object):
         Base.metadata.create_all(self.engine)
         excludedProjects = []
         for project in projectList:
+            # Find out when the apache project repo was created
+            apacheProjectCreationDate = self.ghtorrentsession.query(
+                self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
+                self.ghtorrentusers.c.login == 'apache',
+                self.ghtorrentprojects.c.name == project).first().project_creation_date
+            # TODO: may fail to find creation date
+
+            log.info('Scanning ghtorrent to find out which companies may be working on this project...')
+            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
+                self.ghtorrentusers.c.login, self.ghtorrentusers.c.name.label('company_name'),
+                self.ghtorrentusers.c.email).filter(self.ghtorrentusers.c.type == 'ORG',
+                                                    self.ghtorrentprojects.c.name == project,
+                                                    self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
+                asc(self.ghtorrentprojects.c.created_at))
+            if rows.count() == 0:
+                log.error('Failed to find any pre-Apache repos for project %s', project)
+                excludedProjects.append(project)
+                continue
+            for row in rows:
+                # Store Company if not seen
+                if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
+                    newCompany = Company(ghlogin=row.login, name=row.company_name,
+                                         domain=None if row.email is None else EMAIL_DOMAIN_REGEX.search(
+                                             row.email).group(1))
+                    self.session.add(newCompany)
+                    newCompanyProject = CompanyProject(company=newCompany, project=project)
+                    self.session.add(newCompanyProject)
+
             # Delete existing entries for this project related to contribution activity
             for table in [Issue, IssueAssignment, AccountProject]:
                 log.info("deleted %d entries for project %s",
@@ -317,28 +345,6 @@ class JIRADB(object):
             # Delete contributors that have no accounts
             log.info("deleted %d unused contributors", self.deleteUnusedEntries(Contributor,
                                                                                 (ContributorAccount, ContributorAccount.contributors_id)))
-
-            apacheProjectCreationDate = self.ghtorrentsession.query(
-                self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
-                self.ghtorrentusers.c.login == 'apache',
-                self.ghtorrentprojects.c.name == project).first().project_creation_date
-            # TODO: may fail to find creation date
-            log.info('Scanning ghtorrent to find out which companies may be working on this project...')
-            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
-                self.ghtorrentusers.c.login, self.ghtorrentusers.c.name.label('company_name'),
-                self.ghtorrentusers.c.email).filter(self.ghtorrentusers.c.type == 'ORG',
-                                                    self.ghtorrentprojects.c.name == project,
-                                                    self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
-                asc(self.ghtorrentprojects.c.created_at))
-            for row in rows:
-                # Store Company if not seen
-                if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
-                    newCompany = Company(ghlogin=row.login, name=row.company_name,
-                                         domain=None if row.email is None else EMAIL_DOMAIN_REGEX.search(
-                                             row.email).group(1))
-                    self.session.add(newCompany)
-                    newCompanyProject = CompanyProject(company=newCompany, project=project)
-                    self.session.add(newCompanyProject)
 
             log.info("Scanning project %s...", project)
             scanStartTime = time.time()
