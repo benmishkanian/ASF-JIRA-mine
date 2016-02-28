@@ -288,6 +288,14 @@ class JIRADB(object):
     def deleteRows(self, table, *filterArgs):
         return self.session.query(table).filter(*filterArgs).delete(synchronize_session='fetch')
 
+    def hasNoChildren(self, parentTable, childTable, idColumn):
+        """Returns a filter clause for the condition where parentTable.id is not referenced by any childTable row."""
+        return ~(self.session.query(childTable).filter(idColumn == parentTable.id).exists())
+
+    def deleteUnusedEntries(self, table, *childTableIDTuples):
+        """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
+        return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
+
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
         Base.metadata.create_all(self.engine)
@@ -299,18 +307,16 @@ class JIRADB(object):
                          self.deleteRows(table, func.lower(table.project) == func.lower(project)), project)
 
             # Delete accounts that have no projects and no issues and no issue assignments
-            log.info("deleted %d orphaned accounts", self.deleteRows(ContributorAccount,
-                ~(self.session.query(AccountProject).filter(
-                    AccountProject.contributoraccounts_id == ContributorAccount.id).exists()),
-                ~(self.session.query(Issue).filter((Issue.reporter_id == ContributorAccount.id) | (
-                    Issue.resolver_id == ContributorAccount.id)).exists()),
-                ~(self.session.query(IssueAssignment).filter((IssueAssignment.assigner_id == ContributorAccount.id) | (
-                    IssueAssignment.assignee_id == ContributorAccount.id)).exists())))
+            log.info("deleted %d unused accounts", self.deleteUnusedEntries(ContributorAccount,
+                                                                            (AccountProject, AccountProject.contributoraccounts_id),
+                                                                            (Issue, Issue.reporter_id),
+                                                                            (Issue, Issue.resolver_id),
+                                                                            (IssueAssignment, IssueAssignment.assigner_id),
+                                                                            (IssueAssignment, IssueAssignment.assignee_id)))
 
             # Delete contributors that have no accounts
-            log.info("deleted %d orphaned contributors", self.deleteRows(Contributor,
-                ~(self.session.query(ContributorAccount).filter(
-                    ContributorAccount.contributors_id == Contributor.id).exists())))
+            log.info("deleted %d unused contributors", self.deleteUnusedEntries(Contributor,
+                                                                                (ContributorAccount, ContributorAccount.contributors_id)))
 
             apacheProjectCreationDate = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
