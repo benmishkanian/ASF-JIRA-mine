@@ -302,11 +302,16 @@ class JIRADB(object):
         excludedProjects = []
         for project in projectList:
             # Find out when the apache project repo was created
-            apacheProjectCreationDate = self.ghtorrentsession.query(
+            projectRepo = self.ghtorrentsession.query(
                 self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
                 self.ghtorrentusers.c.login == 'apache',
-                self.ghtorrentprojects.c.name == project).first().project_creation_date
-            # TODO: may fail to find creation date
+                self.ghtorrentprojects.c.name == project).first()
+            if projectRepo is None:
+                log.error('Failed to find any Apache repos for project %s', project)
+                excludedProjects.append(project)
+                continue
+            else:
+                apacheProjectCreationDate = projectRepo.project_creation_date
 
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
             rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
