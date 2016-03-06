@@ -24,6 +24,7 @@ GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
 
 DATE_FORMAT = '%Y-%m-%d'
 JIRA_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
+JQL_TIME_FORMAT = '%Y-%m-%d %H:%M'
 
 log = logging.getLogger('jiradb')
 
@@ -354,7 +355,10 @@ class JIRADB(object):
             log.info("Scanning project %s...", project)
             scanStartTime = time.time()
             try:
-                issuePool = self.jira.search_issues('project = ' + project, maxResults=False, expand='changelog')
+                JQLQuery = 'project = "{0}" AND created < "{1}" AND (created > "{2}" OR resolved < "{1}")'\
+                    .format(project, self.endDate.strftime(JQL_TIME_FORMAT), self.startDate.strftime(JQL_TIME_FORMAT))
+                log.debug('JQL Query: %s', JQLQuery)
+                issuePool = self.jira.search_issues(JQLQuery, maxResults=False, expand='changelog')
             except JIRAError:
                 log.error('Failed to find project %s on JIRA', project)
                 excludedProjects.append(project)
@@ -581,36 +585,41 @@ class JIRADB(object):
                     usingPersonalEmail = True
             if not usingPersonalEmail:
                 # Check for personal domain
-                domain = EMAIL_DOMAIN_REGEX.search(contributorEmail).group(1)
-                try:
-                    whoisInfo = pythonwhois.get_whois(domain)
-                    # Also check if they are using the WHOIS obfuscator "whoisproxy"
-                    usingPersonalEmail = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
-                                                                                   'admin'] is not None and 'admin' in \
-                                                                                                            whoisInfo[
-                                                                                                                'contacts'] and (
-                                             'name' in whoisInfo['contacts']['admin'] and
-                                             whoisInfo['contacts']['admin']['name'] is not None and
-                                             whoisInfo['contacts']['admin'][
-                                                 'name'].lower() == person.displayName.lower() or 'email' in
-                                             whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
-                                                 'email'] is not None and 'whoisproxy' in
-                                             whoisInfo['contacts']['admin']['email'])
-                except pythonwhois.shared.WhoisException as e:
-                    log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
-                    # we assume that a corporate domain would have been more reliable than this
-                    usingPersonalEmail = True
-                except ConnectionResetError as e:
-                    # this is probably a rate limit or IP ban, which is typically something only corporations do
-                    log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
-                except UnicodeDecodeError as e:
-                    log.warning(
-                        'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
-                        domain, e)
-                    usingPersonalEmail = None
-                except Exception as e:
-                    log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
-                                domain, e)
+                domainMatch = EMAIL_DOMAIN_REGEX.search(contributorEmail)
+                if domainMatch is not None:
+                    domain = domainMatch.group(1)
+                    try:
+                        whoisInfo = pythonwhois.get_whois(domain)
+                        # Also check if they are using the WHOIS obfuscator "whoisproxy"
+                        usingPersonalEmail = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
+                                                                                       'admin'] is not None and 'admin' in \
+                                                                                                                whoisInfo[
+                                                                                                                    'contacts'] and (
+                                                 'name' in whoisInfo['contacts']['admin'] and
+                                                 whoisInfo['contacts']['admin']['name'] is not None and
+                                                 whoisInfo['contacts']['admin'][
+                                                     'name'].lower() == person.displayName.lower() or 'email' in
+                                                 whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
+                                                     'email'] is not None and 'whoisproxy' in
+                                                 whoisInfo['contacts']['admin']['email'])
+                    except pythonwhois.shared.WhoisException as e:
+                        log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
+                        # we assume that a corporate domain would have been more reliable than this
+                        usingPersonalEmail = True
+                    except ConnectionResetError as e:
+                        # this is probably a rate limit or IP ban, which is typically something only corporations do
+                        log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
+                    except UnicodeDecodeError as e:
+                        log.warning(
+                            'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
+                            domain, e)
+                        usingPersonalEmail = None
+                    except Exception as e:
+                        log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
+                                    domain, e)
+                        usingPersonalEmail = None
+                else:
+                    log.warn('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
                     usingPersonalEmail = None
 
             log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
