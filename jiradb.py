@@ -19,6 +19,7 @@ from github3 import GitHub, login
 from apiclient.errors import HttpError
 import pytz
 from requests.exceptions import ConnectionError
+from enum import Enum
 
 GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
 
@@ -72,6 +73,10 @@ def getArguments():
 
 
 def equalsIgnoreCase(s1, s2):
+    if s1 is None:
+        return s2 is None
+    if s2 is None:
+        return s1 is None
     return s1.lower() == s2.lower()
 
 
@@ -177,6 +182,25 @@ class GoogleCache(Base):
                       Column('LinkedInPage', String(128), nullable=False),
                       Column('currentEmployer', String(128))
                       )
+
+
+class WhoisError(Enum):
+    NO_ERR = 0
+    NO_CONTACT_INFO = 1
+    CONFIGURATION_ERR = 2
+    CONNECTION_RESET_ERR = 3
+    UNICODE_DECODE_ERR = 4
+    UNKNOWN_ERR = 5
+
+
+class WhoisCache(Base):
+    __table__ = Table('whoiscache', Base.metadata,
+                      Column('domain', VARCHAR(), primary_key=True),
+                      Column('adminName', VARCHAR(), nullable=True),
+                      Column('adminEmail', VARCHAR(), nullable=True),
+                      Column('error', Integer, nullable=False)
+                      )
+
 
 def TableReflector(engine, schema):
     metadata = MetaData(engine)
@@ -584,52 +608,64 @@ class JIRADB(object):
                 if volunteerDomain in contributorEmail:
                     usingPersonalEmail = True
             if not usingPersonalEmail:
+                usingPersonalEmail = None
                 # Check for personal domain
                 domainMatch = EMAIL_DOMAIN_REGEX.search(contributorEmail)
                 if domainMatch is not None:
                     domain = domainMatch.group(1)
-                    try:
-                        whoisInfo = pythonwhois.get_whois(domain)
-                        # Also check if they are using the WHOIS obfuscator "whoisproxy"
-                        usingPersonalEmail = whoisInfo['contacts'] is not None and whoisInfo['contacts'][
-                                                                                       'admin'] is not None and 'admin' in \
-                                                                                                                whoisInfo[
-                                                                                                                    'contacts'] and (
-                                                 'name' in whoisInfo['contacts']['admin'] and
-                                                 whoisInfo['contacts']['admin']['name'] is not None and
-                                                 whoisInfo['contacts']['admin'][
-                                                     'name'].lower() == person.displayName.lower() or 'email' in
-                                                 whoisInfo['contacts']['admin'] and whoisInfo['contacts']['admin'][
-                                                     'email'] is not None and 'whoisproxy' in
-                                                 whoisInfo['contacts']['admin']['email'])
-                    except pythonwhois.shared.WhoisException as e:
-                        log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
-                        # we assume that a corporate domain would have been more reliable than this
+                    # Try to get domain info from cache
+                    whoisCacheRow = self.session.query(WhoisCache).filter(WhoisCache.domain == domain).first()
+                    if whoisCacheRow is None:
+                        # Run a WHOIS query
+                        adminEmail = None
+                        adminName = None
+                        try:
+                            whoisInfo = pythonwhois.get_whois(domain)
+
+                            if whoisInfo['contacts'] is not None and whoisInfo['contacts']['admin'] is not None and 'admin' in \
+                                    whoisInfo['contacts']:
+                                adminEmail = whoisInfo['contacts']['admin']['email'] if 'email' in whoisInfo['contacts']['admin'] else None
+                                adminName = whoisInfo['contacts']['admin']['name'] if 'name' in whoisInfo['contacts']['admin'] else None
+                                errorEnum = WhoisError.NO_ERR
+                            else:
+                                errorEnum = WhoisError.NO_CONTACT_INFO
+                        except pythonwhois.shared.WhoisException as e:
+                            log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
+                            # we assume that a corporate domain would have been more reliable than this
+                            errorEnum = WhoisError.CONFIGURATION_ERR
+                        except ConnectionResetError as e:
+                            # this is probably a rate limit or IP ban, which is typically something only corporations do
+                            log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
+                            errorEnum = WhoisError.CONNECTION_RESET_ERR
+                        except UnicodeDecodeError as e:
+                            log.warning(
+                                'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
+                                domain, e)
+                            errorEnum = WhoisError.UNICODE_DECODE_ERR
+                        except Exception as e:
+                            log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
+                                        domain, e)
+                            errorEnum = WhoisError.UNKNOWN_ERR
+                        whoisCacheRow = WhoisCache(domain=domain, adminName=adminName, adminEmail=adminEmail, error=errorEnum.value)
+                        self.session.add(whoisCacheRow)
+
+                    if whoisCacheRow.error == WhoisError.CONFIGURATION_ERR.value:
                         usingPersonalEmail = True
-                    except ConnectionResetError as e:
-                        # this is probably a rate limit or IP ban, which is typically something only corporations do
-                        log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
-                    except UnicodeDecodeError as e:
-                        log.warning(
-                            'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
-                            domain, e)
-                        usingPersonalEmail = None
-                    except Exception as e:
-                        log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
-                                    domain, e)
-                        usingPersonalEmail = None
+                    elif whoisCacheRow.error == WhoisError.CONNECTION_RESET_ERR.value:
+                        usingPersonalEmail = False
+                    elif whoisCacheRow.error == WhoisError.NO_ERR.value:
+                        # Check for an identity match, or whether they are using the WHOIS obfuscator "whoisproxy"
+                        usingPersonalEmail = equalsIgnoreCase(whoisCacheRow.adminName,
+                                                              person.displayName) or equalsIgnoreCase(
+                            whoisCacheRow.adminEmail, contributorEmail) or 'whoisproxy' in contributorEmail
                 else:
                     log.warn('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
-                    usingPersonalEmail = None
 
             log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
             contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
                                                     displayName=person.displayName, email=contributorEmail,
                                                     hasCommercialEmail=not usingPersonalEmail)
             self.session.add(contributorAccount)
-            # If this email is commercial, set hasCommercialEmail=True
-            contributor.hasCommercialEmail = True
-            self.session.add(contributor)
 
         # Persist this AccountProject if not exits
         accountProject = self.session.query(AccountProject).filter(
