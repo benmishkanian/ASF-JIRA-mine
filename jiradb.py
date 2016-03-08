@@ -745,7 +745,7 @@ class JIRADB(object):
 
             # Get list of related org logins (used for the next two sections)
             relatedorgrows = self.session.query(CompanyProject, Company.ghlogin).join(Company).filter(
-                CompanyProject.project == project)
+                func.lower(CompanyProject.project) == func.lower(project))
             relatedOrgLogins = [orgrow.ghlogin for orgrow in relatedorgrows]
 
             # Find out if their github account is a member of an organization that is possibly contributing
@@ -766,7 +766,7 @@ class JIRADB(object):
             # Find out if they committed to a related project
             def getRelatedProjectID(orgLogin, projectName):
                 return self.ghtorrentsession.query(self.ghtorrentprojects.c.id).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
-                    self.ghtorrentprojects.c.name == projectName, self.ghtorrentusers.c.login == orgLogin)
+                    func.lower(self.ghtorrentprojects.c.name) == func.lower(projectName), self.ghtorrentusers.c.login == orgLogin)
 
             isRelatedProjectCommitter = False
             for relatedOrgLogin in relatedOrgLogins:
