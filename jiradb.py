@@ -512,19 +512,19 @@ class JIRADB(object):
         contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
-        # Find out if there is a contributor with an account that has the same email or (the same username and the same project) or (the same name and the same project)
+        # Find out if there is a contributor with an account that has the same email or (the same username on the same service) or (the same name and the same project)
         if contributorEmail == 'dev-null@apache.org':
             # We can't match using this anonymous email
             contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
                 ((ContributorAccount.username == person.name) & (
-                    func.lower(AccountProject.project) == func.lower(project))) | (
+                    ContributorAccount.service == service)) | (
                     (ContributorAccount.displayName == person.displayName) & (
                         func.lower(AccountProject.project) == func.lower(project)))).first()
         else:
             contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
                 (ContributorAccount.email == contributorEmail) | (
                     (ContributorAccount.username == person.name) & (
-                        func.lower(AccountProject.project) == func.lower(project))) | (
+                        ContributorAccount.service == service)) | (
                     (ContributorAccount.displayName == person.displayName) & (
                         func.lower(AccountProject.project) == func.lower(project)))).first()
         # TODO: it may be good to rank matchings based on what matched (e.g. displayName-only match is low ranking)
