@@ -8,6 +8,7 @@ import os
 from datetime import datetime, MAXYEAR, MINYEAR
 
 from github3.null import NullObject
+from github3.exceptions import UnprocessableEntity
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, aliased
@@ -571,6 +572,9 @@ class JIRADB(object):
                                 if verificationFunction(ghUser, person):
                                     ghMatchedUser = ghUser
                             except StopIteration:
+                                break
+                            except UnprocessableEntity as e:
+                                log.error("Aborting search for user %s due to GitHub API error: %s", person.name, e.message)
                                 break
 
                 # Try matching based on email
