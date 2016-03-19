@@ -530,7 +530,8 @@ class JIRADB(object):
         # TODO: it may be good to rank matchings based on what matched (e.g. displayName-only match is low ranking)
 
         if contributor is None:
-            # Persist new entry to contributors table
+            log.debug('Could not merge contributor given username %s, displayName %s, service %s, project %s. A new contributor object will be created.',
+                     person.name, person.displayName, service, project)
 
             # Try to get information from Github profile
             ghMatchedUser = None
