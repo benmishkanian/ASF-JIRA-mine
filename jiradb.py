@@ -513,21 +513,24 @@ class JIRADB(object):
         contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
-        # Find out if there is a contributor with an account that has the same email or (the same username on the same service) or (the same name and the same project)
+        # Find out if there is a contributor with an account that has the same email or (the same username on the same service)
         if contributorEmail == 'dev-null@apache.org':
-            # We can't match using this anonymous email
-            contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
-                ((ContributorAccount.username == person.name) & (
-                    ContributorAccount.service == service)) | (
-                    (ContributorAccount.displayName == person.displayName) & (
-                        func.lower(AccountProject.project) == func.lower(project)))).first()
+            # We can't match using this anonymous email. Check username and service only.
+            contributor = self.session.query(Contributor).join(ContributorAccount).filter(
+                (ContributorAccount.username == person.name) & (
+                    ContributorAccount.service == service)).first()
         else:
-            contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
+            contributor = self.session.query(Contributor).join(ContributorAccount).filter(
                 (ContributorAccount.email == contributorEmail) | (
                     (ContributorAccount.username == person.name) & (
-                        ContributorAccount.service == service)) | (
-                    (ContributorAccount.displayName == person.displayName) & (
-                        func.lower(AccountProject.project) == func.lower(project)))).first()
+                        ContributorAccount.service == service))).first()
+
+        if contributor is None:
+            # Match if there is an AccountProject with the same displayName and project
+            contributor = self.session.query(Contributor).join(ContributorAccount).join(AccountProject).filter(
+                (ContributorAccount.displayName == person.displayName) & (
+                        func.lower(AccountProject.project) == func.lower(project))).first()
+
         # TODO: it may be good to rank matchings based on what matched (e.g. displayName-only match is low ranking)
 
         if contributor is None:
