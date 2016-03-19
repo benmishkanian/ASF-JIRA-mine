@@ -116,6 +116,15 @@ buildFeatureTable <- function(project) {
     featureTable
 }
 
+rankProjectsByCommercialization <- function(projectVector) {
+    getCommercializationScore <- function(project) {
+        mean(rowSums((buildFeatureTable(project)+0)[,-1]))
+    }
+    commercializationScores <- sapply(projectVector, getCommercializationScore)
+    scoreTable <- data.frame(projectVector, commercializationScores)
+    scoreTable[order(scoreTable[,2])]
+}
+
 printClassificationWorksheet <- function(project) {
     identifyingData <- dbGetQuery(dbConnection, paste("select contributors.id as \"contributorId\", \"ghLogin\", username, \"displayName\", email from contributors inner join contributoraccounts on contributors.id=contributoraccounts.contributors_id where contributors.id in (select distinct contributors.id from contributors inner join contributoraccounts ca on contributors.id=ca.contributors_id inner join accountprojects on ca.id=accountprojects.contributoraccounts_id where upper(project)=upper('", project, "')) order by \"contributorId\" asc", sep=""))
     identifyingData$isCommercial <- NA
@@ -145,4 +154,8 @@ getContributorID <- function(ghUsername, otherUsername) {
     else {
         dbGetQuery(dbConnection, paste("select contributors.id from contributors inner join contributoraccounts on contributors.id=contributors_id where username='", otherUsername, "'", sep = ""))$id
     }
+}
+
+writeFeatureTables <- function(projects) {
+    sapply(projects, function(project)write.csv(buildFeatureTable(project), paste(project, ".csv", sep = ""), row.names = FALSE))
 }
