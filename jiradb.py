@@ -513,6 +513,9 @@ class JIRADB(object):
         contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
+        if len(contributorEmail) > 64:
+            log.warn("Truncating the following email to 64 characters: %s", contributorEmail)
+            contributorEmail = contributorEmail[:64]
         # Find out if there is a contributor with an account that has the same email or (the same username on the same service)
         if contributorEmail == 'dev-null@apache.org':
             # We can't match using this anonymous email. Check username and service only.
