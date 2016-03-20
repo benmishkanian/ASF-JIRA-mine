@@ -353,9 +353,12 @@ class JIRADB(object):
             for row in rows:
                 # Store Company if not seen
                 if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
-                    newCompany = Company(ghlogin=row.login, name=row.company_name,
-                                         domain=None if row.email is None else EMAIL_DOMAIN_REGEX.search(
-                                             row.email).group(1))
+                    companyDomain = None
+                    if row.email is not None:
+                        companyDomainMatch = EMAIL_DOMAIN_REGEX.search(row.email)
+                        if companyDomainMatch is not None:
+                            companyDomain = companyDomainMatch.group(1)
+                    newCompany = Company(ghlogin=row.login, name=row.company_name, domain=companyDomain)
                     self.session.add(newCompany)
                     newCompanyProject = CompanyProject(company=newCompany, project=project)
                     self.session.add(newCompanyProject)
