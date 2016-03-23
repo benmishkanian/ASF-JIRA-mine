@@ -116,13 +116,14 @@ buildFeatureTable <- function(project) {
     featureTable
 }
 
-rankProjectsByCommercialization <- function(projectVector) {
+rankProjectsByCommercialization <- function() {
+    projectVector <- getMinedProjects()
     getCommercializationScore <- function(project) {
         mean(rowSums((buildFeatureTable(project)+0)[,-1]))
     }
     commercializationScores <- sapply(projectVector, getCommercializationScore)
     scoreTable <- data.frame(projectVector, commercializationScores)
-    scoreTable[order(scoreTable[,2])]
+    scoreTable[order(commercializationScores),]
 }
 
 printClassificationWorksheet <- function(project) {
@@ -154,6 +155,10 @@ getContributorID <- function(ghUsername, otherUsername) {
     else {
         dbGetQuery(dbConnection, paste("select contributors.id from contributors inner join contributoraccounts on contributors.id=contributors_id where username='", otherUsername, "'", sep = ""))$id
     }
+}
+
+getMinedProjects <- function() {
+    dbGetQuery(dbConnection, "select distinct project from accountprojects;")$project
 }
 
 writeFeatureTables <- function(projects) {
