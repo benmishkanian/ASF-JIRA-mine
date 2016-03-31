@@ -94,20 +94,42 @@ buildFeatureTable <- function(project) {
         featureEvaluator
     }
     
+    customFeatureQueryClosure <- function(queryHead, queryTail, featureName) {
+        featureEvaluator <- function(contributorId) {
+            #qer <- paste(queryHead, contributorId, queryTail, sep = "")
+            #print(qer)
+            result <- dbGetQuery(dbConnection, paste(queryHead, contributorId, queryTail, sep = ""))
+            if (nrow(result) == 0) -1 else result[,1]
+        }
+        attr(featureEvaluator, "featureClause") <- featureName
+        featureEvaluator
+    }
+    
+    BHCommitCountEvaluator <- function(contributorId) {
+        dbGetQuery(dbConnection, paste("select sum(\"BHCommitCount\") as \"BHCommitCountSum\" from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", contributorId, " and upper(project)=upper('", project, "');", sep=""))$BHCommitCountSum
+    }
+    
     # generate vector of functions which compute feature values for a given contributorId
     featureEvaluators <- sapply(c(
         "\"hasCommercialEmail\"=True",
         "\"hasRelatedCompanyEmail\"=True",
         "\"hasRelatedEmployer\"=True",
         "\"isRelatedOrgMember\"=True",
-        "\"isRelatedProjectCommitter\"=True",
-        "\"BHCommitCount\">\"NonBHCommitCount\""), featureQueryClosure)
+        "\"isRelatedProjectCommitter\"=True"), featureQueryClosure)
+    
+    customFeatureEvaluators <- c(
+        customFeatureQueryClosure("select sum(\"BHCommitCount\") as \"BHCommitCountSum\" from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", paste(" and upper(project)=upper('", project, "');", sep=""), "BHCommitCountSum"),
+        customFeatureQueryClosure("select sum(\"NonBHCommitCount\") as \"NonBHCommitCount\" from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", paste(" and upper(project)=upper('", project, "');", sep=""), "NonBHCommitCountSum"),
+        customFeatureQueryClosure(paste("select domaincount from (select domain, count(domain) as domaincount from (select domain, count(domain) as domaincount, contributors_id, count(contributors_id) as contributorcount from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where (domain <> '') is True and project='", project, "' group by contributors_id, domain) as subq group by domain) subq2 where exists ( select distinct domain from contributoraccounts where contributors_id=", sep=""), " and (domain <> '') is True and domain=subq2.domain) order by domaincount desc limit 1;", "domaincount")
+        )
+    
+    featureEvaluators <- c(featureEvaluators, customFeatureEvaluators)
     
     projectContributors <- getProjectContributors(project)
     
     # returns a list of feature values for a given feature evaluator applied to all contributors
     getFeatureValues <- function(featureEvaluator) {
-        vapply(projectContributors, featureEvaluator, TRUE)
+        sapply(projectContributors, featureEvaluator)
     }
     
     # construct the feature table by applying getFeatureValues to each evaluator, and merging these results as columns

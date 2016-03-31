@@ -128,6 +128,7 @@ class ContributorAccount(Base):
                       Column('service', String(8)),
                       Column('displayName', String(64), nullable=True),
                       Column('email', String(64)),
+                      Column('domain', VARCHAR()),
                       Column('hasCommercialEmail', Boolean, nullable=True)
                       )
     contributor = relationship("Contributor")
@@ -621,6 +622,7 @@ class JIRADB(object):
             for volunteerDomain in VOLUNTEER_DOMAINS:
                 if volunteerDomain in contributorEmail:
                     usingPersonalEmail = True
+            domain = None
             if not usingPersonalEmail:
                 usingPersonalEmail = None
                 # Check for personal domain
@@ -678,7 +680,7 @@ class JIRADB(object):
             log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
             contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
                                                     displayName=person.displayName, email=contributorEmail,
-                                                    hasCommercialEmail=not usingPersonalEmail)
+                                                    domain=domain, hasCommercialEmail=not usingPersonalEmail)
             self.session.add(contributorAccount)
 
         # Persist this AccountProject if not exits
