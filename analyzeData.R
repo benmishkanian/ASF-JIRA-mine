@@ -96,8 +96,6 @@ buildFeatureTable <- function(project) {
     
     customFeatureQueryClosure <- function(queryHead, queryTail, featureName) {
         featureEvaluator <- function(contributorId) {
-            #qer <- paste(queryHead, contributorId, queryTail, sep = "")
-            #print(qer)
             result <- dbGetQuery(dbConnection, paste(queryHead, contributorId, queryTail, sep = ""))
             if (nrow(result) == 0) -1 else result[,1]
         }
@@ -120,7 +118,7 @@ buildFeatureTable <- function(project) {
     customFeatureEvaluators <- c(
         customFeatureQueryClosure("select sum(\"BHCommitCount\") as \"BHCommitCountSum\" from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", paste(" and upper(project)=upper('", project, "');", sep=""), "BHCommitCountSum"),
         customFeatureQueryClosure("select sum(\"NonBHCommitCount\") as \"NonBHCommitCount\" from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where contributors_id=", paste(" and upper(project)=upper('", project, "');", sep=""), "NonBHCommitCountSum"),
-        customFeatureQueryClosure(paste("select domaincount from (select domain, count(domain) as domaincount from (select domain, count(domain) as domaincount, contributors_id, count(contributors_id) as contributorcount from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where (domain <> '') is True and project='", project, "' group by contributors_id, domain) as subq group by domain) subq2 where exists ( select distinct domain from contributoraccounts where contributors_id=", sep=""), " and (domain <> '') is True and domain=subq2.domain) order by domaincount desc limit 1;", "domaincount")
+        customFeatureQueryClosure(paste("select domaincount from (select domain, count(domain) as domaincount from (select domain, contributors_id from contributoraccounts inner join accountprojects on contributoraccounts.id=accountprojects.contributoraccounts_id where (domain <> '') is True and \"hasCommercialEmail\"=True and project='", project, "' group by contributors_id, domain) as subq group by domain) subq2 where exists ( select distinct domain from contributoraccounts where contributors_id=", sep=""), " and (domain <> '') is True and domain=subq2.domain) order by domaincount desc limit 1;", "domaincount")
         )
     
     featureEvaluators <- c(featureEvaluators, customFeatureEvaluators)
