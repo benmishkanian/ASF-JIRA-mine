@@ -27,6 +27,9 @@ GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
 DATE_FORMAT = '%Y-%m-%d'
 JIRA_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
 JQL_TIME_FORMAT = '%Y-%m-%d %H:%M'
+CVSANALY_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+MIN_COMMITS = 20
 
 log = logging.getLogger('jiradb')
 
@@ -220,12 +223,12 @@ class GitDB(object):
         try:
             self.engine.connect()
         except ProgrammingError:
-            log.info('Database %s not found. Attemting to clone project repo...', schema)
+            log.info('Database %s not found. Attempting to clone project repo...', schema)
             call(['git', 'clone', 'git@github.com:apache/' + projectLower + '.git'])
             os.chdir(projectLower)
             log.info('Creating database %s...', schema)
             call(['mysql', '-u', gitdbuser, '--password=' + gitdbpass, '-e',
-                  'create database ' + schema + ';'])
+                  'create database `' + schema + '`;'])
             log.info('Populating database %s using cvsanaly...', schema)
             call(['cvsanaly2', '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema,
                   '--db-hostname', gitdbhostname])
@@ -393,8 +396,17 @@ class JIRADB(object):
                 excludedProjects.append(project)
                 continue
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
+
             # Get DB containing git data for this project
             gitDB = GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname)
+
+            # Verify that there are enough commits
+            if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > self.startDate.strftime(CVSANALY_TIME_FORMAT),
+                                                     gitDB.log.c.author_date < self.endDate.strftime(CVSANALY_TIME_FORMAT)).count() < MIN_COMMITS:
+                log.warn('Project %s had less than %s commits in the given time window and will be excluded', project, MIN_COMMITS)
+                excludedProjects.append(project)
+                continue
+
             log.info("Persisting issues...")
             for issue in issuePool:
                 # Check if issue was created in the specified time window
