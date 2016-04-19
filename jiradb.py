@@ -509,6 +509,7 @@ class JIRADB(object):
 
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
+        self.session.commit()
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
 
     def waitForRateLimit(self, resourceType):
