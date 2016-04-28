@@ -43,7 +43,7 @@ except ImportError:
 
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
-EMAIL_DOMAIN_REGEX = re.compile('.+@(\S+)')
+EMAIL_DOMAIN_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
 SCHEMA_REGEX = re.compile('.+/([^/?]+)\?*[^/]*')
 
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
@@ -630,65 +630,70 @@ class JIRADB(object):
         if contributorAccount is None:
             # Persist new account
 
-            # Find out if using a personal email address
-            usingPersonalEmail = False
-            for volunteerDomain in VOLUNTEER_DOMAINS:
-                if volunteerDomain in contributorEmail:
-                    usingPersonalEmail = True
-            domain = None
-            if not usingPersonalEmail:
-                usingPersonalEmail = None
-                # Check for personal domain
-                domainMatch = EMAIL_DOMAIN_REGEX.search(contributorEmail)
-                if domainMatch is not None:
-                    domain = domainMatch.group(1)
-                    # Try to get domain info from cache
-                    whoisCacheRow = self.session.query(WhoisCache).filter(WhoisCache.domain == domain).first()
-                    if whoisCacheRow is None:
-                        # Run a WHOIS query
-                        adminEmail = None
-                        adminName = None
-                        try:
-                            whoisInfo = pythonwhois.get_whois(domain)
+            # Parse email domain
+            domainMatch = EMAIL_DOMAIN_REGEX.search(contributorEmail)
+            domain = domainMatch.group(1) if domainMatch is not None else None
 
-                            if whoisInfo['contacts'] is not None and whoisInfo['contacts']['admin'] is not None and 'admin' in \
-                                    whoisInfo['contacts']:
-                                adminEmail = whoisInfo['contacts']['admin']['email'] if 'email' in whoisInfo['contacts']['admin'] else None
-                                adminName = whoisInfo['contacts']['admin']['name'] if 'name' in whoisInfo['contacts']['admin'] else None
-                                errorEnum = WhoisError.NO_ERR
-                            else:
-                                errorEnum = WhoisError.NO_CONTACT_INFO
-                        except pythonwhois.shared.WhoisException as e:
-                            log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
-                            # we assume that a corporate domain would have been more reliable than this
-                            errorEnum = WhoisError.CONFIGURATION_ERR
-                        except ConnectionResetError as e:
-                            # this is probably a rate limit or IP ban, which is typically something only corporations do
-                            log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
-                            errorEnum = WhoisError.CONNECTION_RESET_ERR
-                        except UnicodeDecodeError as e:
-                            log.warning(
-                                'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
-                                domain, e)
-                            errorEnum = WhoisError.UNICODE_DECODE_ERR
-                        except Exception as e:
-                            log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
-                                        domain, e)
-                            errorEnum = WhoisError.UNKNOWN_ERR
-                        whoisCacheRow = WhoisCache(domain=domain, adminName=adminName, adminEmail=adminEmail, error=errorEnum.value)
-                        self.session.add(whoisCacheRow)
-
-                    if whoisCacheRow.error == WhoisError.CONFIGURATION_ERR.value:
-                        usingPersonalEmail = True
-                    elif whoisCacheRow.error == WhoisError.CONNECTION_RESET_ERR.value:
-                        usingPersonalEmail = False
-                    elif whoisCacheRow.error == WhoisError.NO_ERR.value:
-                        # Check for an identity match, or whether they are using the WHOIS obfuscator "whoisproxy"
-                        usingPersonalEmail = equalsIgnoreCase(whoisCacheRow.adminName,
-                                                              person.displayName) or equalsIgnoreCase(
-                            whoisCacheRow.adminEmail, contributorEmail) or 'whoisproxy' in contributorEmail
+            if domain is not None:
+                # special cases: some domains can not be evaluated
+                if domain == 'apache.org' or domain.endswith('.local') or domain.endswith('.(none)') or domain.endswith('.internal'):
+                    usingPersonalEmail = None
                 else:
-                    log.warn('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
+                    # Find out if using a personal email address
+                    usingPersonalEmail = domain in VOLUNTEER_DOMAINS
+                    if not usingPersonalEmail:
+                        # Check for personal domain
+                        usingPersonalEmail = None
+                        # Try to get domain info from cache
+                        whoisCacheRow = self.session.query(WhoisCache).filter(WhoisCache.domain == domain).first()
+                        if whoisCacheRow is None:
+                            # Run a WHOIS query
+                            adminEmail = None
+                            adminName = None
+                            try:
+                                whoisInfo = pythonwhois.get_whois(domain)
+
+                                if whoisInfo['contacts'] is not None and whoisInfo['contacts']['admin'] is not None and 'admin' in \
+                                        whoisInfo['contacts']:
+                                    adminEmail = whoisInfo['contacts']['admin']['email'] if 'email' in whoisInfo['contacts']['admin'] else None
+                                    adminName = whoisInfo['contacts']['admin']['name'] if 'name' in whoisInfo['contacts']['admin'] else None
+                                    errorEnum = WhoisError.NO_ERR
+                                else:
+                                    errorEnum = WhoisError.NO_CONTACT_INFO
+                            except pythonwhois.shared.WhoisException as e:
+                                log.warning('Error in WHOIS query for %s: %s. Assuming non-commercial domain.', domain, e)
+                                # we assume that a corporate domain would have been more reliable than this
+                                errorEnum = WhoisError.CONFIGURATION_ERR
+                            except ConnectionResetError as e:
+                                # this is probably a rate limit or IP ban, which is typically something only corporations do
+                                log.warning('Error in WHOIS query for %s: %s. Assuming commercial domain.', domain, e)
+                                errorEnum = WhoisError.CONNECTION_RESET_ERR
+                            except UnicodeDecodeError as e:
+                                log.warning(
+                                    'UnicodeDecodeError in WHOIS query for %s: %s. No assumption will be made about domain.',
+                                    domain, e)
+                                errorEnum = WhoisError.UNICODE_DECODE_ERR
+                            except Exception as e:
+                                log.warning('Unexpected error in WHOIS query for %s: %s. No assumption will be made about domain.',
+                                            domain, e)
+                                errorEnum = WhoisError.UNKNOWN_ERR
+                            whoisCacheRow = WhoisCache(domain=domain, adminName=adminName, adminEmail=adminEmail, error=errorEnum.value)
+                            self.session.add(whoisCacheRow)
+
+                        if whoisCacheRow.error == WhoisError.CONFIGURATION_ERR.value:
+                            usingPersonalEmail = True
+                        elif whoisCacheRow.error == WhoisError.CONNECTION_RESET_ERR.value:
+                            usingPersonalEmail = False
+                        elif whoisCacheRow.error == WhoisError.NO_ERR.value:
+                            # Check for an identity match, or whether they are using the WHOIS obfuscator "whoisproxy"
+                            usingPersonalEmail = equalsIgnoreCase(whoisCacheRow.adminName,
+                                                                  person.displayName) or equalsIgnoreCase(
+                                whoisCacheRow.adminEmail, contributorEmail) or 'whoisproxy' in contributorEmail
+                        else:
+                            usingPersonalEmail = None
+            else:
+                log.warn('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
+                usingPersonalEmail = None
 
             log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
             contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
