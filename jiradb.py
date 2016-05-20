@@ -30,6 +30,7 @@ JQL_TIME_FORMAT = '%Y-%m-%d %H:%M'
 CVSANALY_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 MIN_COMMITS = 20
+MAX_SEARCH_RESULT_SCAN = 5
 
 log = logging.getLogger('jiradb')
 
@@ -45,6 +46,11 @@ VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
 EMAIL_DOMAIN_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
 SCHEMA_REGEX = re.compile('.+/([^/?]+)\?*[^/]*')
+WHOIS_OBFUSCATORS = ["domainnameproxyservice.com", "whoisproxy.org", "1and1-private-registration.com",
+                     "proxy.dreamhost.com", "domainsbyproxy.com", "whoisprotectservice.com", "whoisguard.com",
+                     "whoisprivacyprotect.com", "contactprivacy.com", "privacyprotect.org", "privacyguardian.org",
+                     "domainprivacygroup.com", "privacy@1and1.com", "networksolutionsprivateregistration.com",
+                     "YinSiBaoHu.AliYun.com", "protecteddomainservices.com"]
 
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
@@ -171,6 +177,25 @@ class CompanyProject(Base):
     company = relationship("Company")
 
 
+class ContributorOrganization(Base):
+    __table__ = Table('contributororganizations', Base.metadata,
+                      Column('id', Integer, primary_key=True),
+                      Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False),
+                      Column('githuborganizations_id', VARCHAR(), ForeignKey("githuborganizations.login"), nullable=False)
+                      )
+    contributor = relationship("Contributor")
+    githuborganization = relationship("GithubOrganization")
+
+
+class GithubOrganization(Base):
+    __table__ = Table('githuborganizations', Base.metadata,
+                      Column('login', VARCHAR(), primary_key=True),
+                      Column('company', VARCHAR()),
+                      Column('email', VARCHAR()),
+                      Column('name', VARCHAR())
+                      )
+
+
 class MockPerson(object):
     """Represents a JIRA user object. Construct this object when username, displayName, and emailAddress are known, but the JIRA user object is not available."""
 
@@ -184,7 +209,7 @@ class GoogleCache(Base):
     __table__ = Table('googlecache', Base.metadata,
                       Column('displayName', String(64), primary_key=True),
                       Column('project', String(16), primary_key=True),
-                      Column('LinkedInPage', String(128), nullable=False),
+                      Column('LinkedInPage', String(128)),
                       Column('currentEmployer', String(128))
                       )
 
@@ -325,6 +350,9 @@ class JIRADB(object):
     def deleteUnusedEntries(self, table, *childTableIDTuples):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
+
+    def createTables(self):
+        Base.metadata.create_all(self.engine)
 
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
@@ -564,7 +592,11 @@ class JIRADB(object):
                 rows = self.ghusersextendedsession.query(self.ghusersextended).filter(
                     self.ghusersextended.c.email == contributorEmail)
                 for ghAccount in rows:
-                    potentialUser = self.gh.user(ghAccount.login)
+                    try:
+                        potentialUser = self.gh.user(ghAccount.login)
+                    except ConnectionError:
+                        log.error("github query failed when attempting to verify username %s", ghAccount.login)
+                        potentialUser = NullObject()
                     if not isinstance(potentialUser, NullObject):
                         # valid GitHub username
                         ghMatchedUser = self.refreshGithubUser(potentialUser)
@@ -686,9 +718,16 @@ class JIRADB(object):
                             usingPersonalEmail = False
                         elif whoisCacheRow.error == WhoisError.NO_ERR.value:
                             # Check for an identity match, or whether they are using the WHOIS obfuscator "whoisproxy"
-                            usingPersonalEmail = equalsIgnoreCase(whoisCacheRow.adminName,
-                                                                  person.displayName) or equalsIgnoreCase(
-                                whoisCacheRow.adminEmail, contributorEmail) or 'whoisproxy' in contributorEmail
+                            # Check if they are using a WHOIS obfuscation service
+                            for obfuscator in WHOIS_OBFUSCATORS:
+                                if contributorEmail.endswith(obfuscator):
+                                    usingPersonalEmail = True
+                                    break
+                            if not usingPersonalEmail:
+                                # Check if they own their email domain
+                                usingPersonalEmail = equalsIgnoreCase(whoisCacheRow.adminName,
+                                                                      person.displayName) or equalsIgnoreCase(
+                                    whoisCacheRow.adminEmail, contributorEmail)
                         else:
                             usingPersonalEmail = None
             else:
@@ -709,52 +748,7 @@ class JIRADB(object):
             # compute stats for this account on this project
 
             # get employer from LinkedIn
-            # Try to get LinkedIn information from the Google cache
-            gCacheRow = self.session.query(GoogleCache).filter(GoogleCache.displayName == person.displayName,
-                                                               GoogleCache.project == project).first()
-            if gCacheRow is None and self.googleSearchEnabled:
-                # Get LinkedIn page from Google Search
-                searchResults = None
-                searchTerm = '{} {}'.format(person.displayName, project)
-                try:
-                    searchResults = self.customSearch.list(q=searchTerm, cx=LINKEDIN_SEARCH_ID).execute()
-                    LinkedInPage = searchResults['items'][0]['link'] if searchResults['searchInformation'][
-                                                                            'totalResults'] != '0' and (
-                                                                            'linkedin.com/in/' in
-                                                                            searchResults['items'][0][
-                                                                                'link'] or 'linkedin.com/pub/' in
-                                                                            searchResults['items'][0]['link']) else None
-
-                    if LinkedInPage is not None:
-                        # Add this new LinkedInPage to the Google search cache table
-                        gCacheRow = GoogleCache(displayName=person.displayName, project=project,
-                                                LinkedInPage=LinkedInPage,
-                                                currentEmployer=None)
-                        self.session.add(gCacheRow)
-                except HttpError as e:
-                    if e.resp['status'] == '403':
-                        log.warning('Google search rate limit exceeded. Disabling Google search.')
-                        self.googleSearchEnabled = False
-                    else:
-                        log.error('Unexpected HttpError while executing Google search "%s"', searchTerm)
-                except Exception as e:
-                    log.error('Failed to get LinkedIn URL. Error: %s', e)
-                    log.debug(searchResults)
-            # Get employer from GoogleCache row, if we can.
-            if gCacheRow is not None and gCacheRow.currentEmployer is None and canGetEmployers:
-                assert gCacheRow.LinkedInPage is not None, 'Google cache error: displayName {} for project {} has no LinkedInPage'.format(
-                    gCacheRow.displayName, gCacheRow.project)
-                log.debug("Getting  employer of %s through LinkedIn URL %s", gCacheRow.displayName,
-                          gCacheRow.LinkedInPage)
-                # get employer from LinkedIn URL using external algorithm
-                try:
-                    gCacheRow.currentEmployer = getEmployer(gCacheRow.LinkedInPage)
-                except Exception as e:
-                    log.info('Could not find employer of %s (%s) using LinkedIn. Reason: %s',
-                             person.displayName,
-                             contributorEmail, e)
-
-            LinkedInEmployer = None if gCacheRow is None else gCacheRow.currentEmployer
+            LinkedInEmployer = self.getLinkedInEmployer(person.displayName, project)
 
             # Find out if they have a domain from a company that is possibly contributing
             # TODO: check if '!=' does what I think it does
@@ -854,12 +848,78 @@ class JIRADB(object):
 
         return accountProject
 
+    def getLinkedInEmployer(self, displayName, project):
+        # Try to get LinkedIn information from the Google cache
+        gCacheRow = self.session.query(GoogleCache).filter(GoogleCache.displayName == displayName,
+                                                           GoogleCache.project == project).first()
+        if gCacheRow is None and self.googleSearchEnabled:
+            # Get LinkedIn page from Google Search
+            searchResults = None
+            searchTerm = '{} {}'.format(displayName, project)
+            try:
+                searchResults = self.customSearch.list(q=searchTerm, cx=LINKEDIN_SEARCH_ID).execute()
+                resultCount = int(searchResults['searchInformation']['totalResults'])
+                LinkedInPage = None
+                for i in range(min(resultCount, MAX_SEARCH_RESULT_SCAN)):
+                    resultLink = searchResults['items'][i]['link']
+                    if 'linkedin.com/in/' in resultLink or ('linkedin.com/pub/' in resultLink and 'linkedin.com/pub/dir/' not in resultLink):
+                        LinkedInPage = searchResults['items'][i]['link']
+                        break
+
+                # Add this new LinkedInPage to the Google search cache table
+                gCacheRow = GoogleCache(displayName=displayName, project=project,
+                                        LinkedInPage=LinkedInPage,
+                                        currentEmployer=None)
+                self.session.add(gCacheRow)
+            except HttpError as e:
+                if e.resp['status'] == '403':
+                    log.warning('Google search rate limit exceeded. Disabling Google search.')
+                    self.googleSearchEnabled = False
+                else:
+                    log.error('Unexpected HttpError while executing Google search "%s"', searchTerm)
+            except Exception as e:
+                log.error('Failed to get LinkedIn URL. Error: %s', e)
+                log.debug(searchResults)
+        # Get employer from GoogleCache row, if we can.
+        if gCacheRow is not None and gCacheRow.currentEmployer is None and canGetEmployers and gCacheRow.LinkedInPage is not None:
+            log.debug("Getting  employer of %s through LinkedIn URL %s", gCacheRow.displayName,
+                      gCacheRow.LinkedInPage)
+            # get employer from LinkedIn URL using external algorithm
+            try:
+                gCacheRow.currentEmployer = getEmployer(gCacheRow.LinkedInPage)
+                log.info('%s contributor %s is employed by %s', project, displayName, gCacheRow.currentEmployer)
+            except Exception as e:
+                log.info('Could not find employer of contributor %s in project %s using LinkedIn. Reason: %s',
+                         displayName,
+                         project, e)
+        return None if gCacheRow is None else gCacheRow.currentEmployer
+
     def getContributors(self):
         return self.session.query(Contributor)
 
     def getVolunteers(self):
         self.getContributors().filter_by(hasCommercialEmail=True)
 
+    def getAccountProjectRows(self, project):
+        return self.session.query(ContributorAccount).join(AccountProject).filter(AccountProject.project == project)
+
+    def persistOrganizations(self, contributor):
+        # get fresh github user object
+        potentialUser = self.gh.user(contributor.ghLogin)
+        if not isinstance(potentialUser, NullObject):
+            ghUser = self.refreshGithubUser(potentialUser)
+            organizations = ghUser.organizations()
+            for organization in organizations:
+                org = self.refreshGithubUser(organization)
+                githubOrganization = self.session.query(GithubOrganization).filter(GithubOrganization.login == org.login).first()
+                if githubOrganization is None:
+                    githubOrganization = GithubOrganization(login=org.login, company=org.company, email=org.email, name=org.name)
+                    self.session.add(githubOrganization)
+                contributorOrganization = self.session.query(ContributorOrganization).filter(ContributorOrganization.contributor == contributor, ContributorOrganization.githuborganization == githubOrganization).first()
+                if contributorOrganization is None:
+                    self.session.add(ContributorOrganization(
+                        contributor=contributor, githuborganization=githubOrganization
+                    ))
 
 if __name__ == "__main__":
     log.setLevel(logging.DEBUG)
@@ -873,6 +933,11 @@ if __name__ == "__main__":
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
+    # Add error file log handler
+    efh = logging.FileHandler('errors.log')
+    efh.setLevel(logging.ERROR)
+    efh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
+    log.addHandler(efh)
 
     args = getArguments()
     jiradb = JIRADB(**args)
