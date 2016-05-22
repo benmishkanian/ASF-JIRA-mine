@@ -1,20 +1,26 @@
 # ASF-JIRA-mine
-Mining Apache JIRA to learn how volunteers and paid developers differ in their use of JIRA
+Mining JIRA and git for Apache projects to learn about contribution patterns
 
 ## Dependencies
 - Python 3.3
 - jira-python
-- pylab
+- cvsanaly
 - sqlalchemy
+- github3.py
+- pythonwhois
+- requests
+- GHTorrent database
 
 ## Usage
-Run mine.py to analyze some data from Apache JIRA. Alternatively, run jiradb.py to refresh the local database for
-offline analysis.
+Run `jiradb.py <projects...>` to do a full analysis of the given projects and store the results in the database.
+If you want more fine-grained control over the mining, you can construct a JIRADB object and call the methods directly.
+Alternatively, you can run `mine.py` for some simple analysis.
+After the database is populated, you can use functions in `analyzeData.R` to do analysis.
 
-### Data caching
-When the script is run, all the downloaded JIRA data is stored in a local SQLite db. If you want to perform queries on
+### Data caching for mine.py
+When mine.py is run, all the downloaded JIRA data is stored in a local SQLite db. If you want to perform queries against
 this cached data instead of downloading new data every time, use the command line flag **-c** or **--cached**.
 
 ### Using other databases
-By default, the scripts write to a local sqlite database **sqlite.db**. You can specify a custom database connection\
-string with the **--dbstring** option.
+By default, the scripts write to a local sqlite database **sqlite.db**. You can specify a custom database connection
+string with the **--dbstring** option. Note that you may need different databases for cvsanaly and GHTorrent.
