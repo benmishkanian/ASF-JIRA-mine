@@ -289,6 +289,11 @@ class JIRADB(object):
         # Create tables if not exists
         Base.metadata.create_all(self.engine)
 
+        # Make map of project to total commit count
+        self.projectCommitCounts = dict(self.session.query(AccountProject.project, func.sum(
+            AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).group_by(
+            AccountProject.project).all())
+
         # DB connection for ghtorrent
         ghtorrentengine = create_engine(self.ghtorrentdbstring)
         GHTorrentSession = sessionmaker(bind=ghtorrentengine)
@@ -332,6 +337,46 @@ class JIRADB(object):
             self.gh = GitHub()
         if self.gitdbpass is None:
             self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
+
+    def getTopContributors(self, project: str, requiredCommitCoverage: float):
+        """
+        Make a list of the top contributors for this project in terms of commit count. We keep appending contributors
+        until at least requiredCommitCoverage percent of the commits are covered by a contributor in the list.
+
+        :param project: name of the project
+        :param requiredCommitCoverage: percentage of commits in project that must have been authored by a contributor in the list
+        :return: a minimal list of the top contributors
+        """
+        assert 0 <= requiredCommitCoverage <= 1
+        requiredCommitCount = requiredCommitCoverage * self.projectCommitCounts[project]
+        coveredCommitCount = 0
+        topContributors = []
+        # Get the list of contributors, ordered by commit count, ascending
+        subq = self.session.query(Contributor.id,
+                                func.sum(AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label(
+                                    'commitcount')).select_from(Contributor).join(ContributorAccount).join(
+            AccountProject).filter(AccountProject.project == project).group_by(Contributor).subquery()
+        contributorCommits = self.session.query(subq).order_by(asc('commitcount')).all()
+        # Append to topContributors until we have sufficient commit coverage
+        while coveredCommitCount < requiredCommitCount:
+            contributorCommitTuple = contributorCommits.pop()
+            topContributors.append(contributorCommitTuple[0])
+            coveredCommitCount = coveredCommitCount + contributorCommitTuple[1]
+        log.info('%d contributors authored at least %f fraction of the commits in %s', len(topContributors), requiredCommitCoverage, project)
+        return topContributors
+
+    def getTopContributorCount(self, projects, requiredProjectCommitCoverage):
+        """
+        Get the minimum number of contributors required to provide commit coverage over all projects.
+
+        :param projects: the projects to cover
+        :param requiredProjectCommitCoverage: fraction of commits in each project that must be covered
+        :return: the number of contributors required
+        """
+        requiredContributorCount = 0
+        for project in projects:
+            requiredContributorCount = requiredContributorCount + len(self.getTopContributors(project, requiredProjectCommitCoverage))
+        return requiredContributorCount
 
     def searchGithubUsers(self, query):
         self.waitForRateLimit('search')
