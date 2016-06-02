@@ -282,10 +282,11 @@ class JIRADB(object):
         self.gitdbhostname = gitdbhostname
         self.jira = JIRA('https://issues.apache.org/jira')
 
-        # Output DB connection
+        # Establish output DB connection
         self.engine = create_engine(self.dbstring)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
+        # Create tables if not exists
         Base.metadata.create_all(self.engine)
 
         # DB connection for ghtorrent
@@ -351,12 +352,8 @@ class JIRADB(object):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
 
-    def createTables(self):
-        Base.metadata.create_all(self.engine)
-
     def persistIssues(self, projectList):
         """Replace the DB data with fresh data"""
-        Base.metadata.create_all(self.engine)
         excludedProjects = []
         for project in projectList:
             # Find out when the apache project repo was created
