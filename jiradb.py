@@ -161,6 +161,14 @@ class AccountProject(Base):
     account = relationship("ContributorAccount")
 
 
+class EmailProjectCommitCount(Base):
+    __table__ = Table('emailprojectcommitcounts', Base.metadata,
+                      Column('email', String(64), primary_key=True),
+                      Column('project', String(16), primary_key=True),
+                      Column('commitcount', Integer, nullable=False)
+                      )
+
+
 class Company(Base):
     __table__ = Table('companies', Base.metadata,
                       Column('ghlogin', VARCHAR(), primary_key=True),
@@ -239,18 +247,19 @@ def TableReflector(engine, schema):
         return Table(tableName, metadata, autoload_with=engine, schema=schema)
     return reflectTable
 
+
 class GitDB(object):
     def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname):
-        projectLower = project.lower()
-        schema = projectLower + '_git'
+        self.projectLower = project.lower()
+        schema = self.projectLower + '_git'
         self.engine = create_engine(
             'mysql+mysqlconnector://{}:{}@{}/{}'.format(gitdbuser, gitdbpass, gitdbhostname, schema))
         try:
             self.engine.connect()
         except ProgrammingError:
             log.info('Database %s not found. Attempting to clone project repo...', schema)
-            call(['git', 'clone', 'git@github.com:apache/' + projectLower + '.git'])
-            os.chdir(projectLower)
+            call(['git', 'clone', 'git@github.com:apache/' + self.projectLower + '.git'])
+            os.chdir(self.projectLower)
             log.info('Creating database %s...', schema)
             call(['mysql', '-u', gitdbuser, '--password=' + gitdbpass, '-e',
                   'create database `' + schema + '`;'])
@@ -261,6 +270,34 @@ class GitDB(object):
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         gitdbTable = TableReflector(self.engine, schema)
+        self.log = gitdbTable('scmlog')
+        self.people = gitdbTable('people')
+        self.gitdbuser = gitdbuser
+        self.gitdbpass = gitdbpass
+        self.schema = schema
+        self.gitdbhostname = gitdbhostname
+
+    def update(self):
+        self.session.close()
+        self.engine.dispose()
+        os.chdir(self.projectLower)
+        log.info('updating git log for project %s', self.projectLower)
+        call(['git', 'pull'])
+        log.info('repopulating git DB...')
+        call(['mysql', '-u', self.gitdbuser, '--password=' + self.gitdbpass, '-e',
+              'drop database `' + self.schema + '`;'])
+        call(['mysql', '-u', self.gitdbuser, '--password=' + self.gitdbpass, '-e',
+              'create database `' + self.schema + '`;'])
+        call(['cvsanaly2', '--db-user', self.gitdbuser, '--db-password', self.gitdbpass, '--db-database', self.schema,
+              '--db-hostname', self.gitdbhostname])
+        os.chdir(os.pardir)
+        log.info('reconnecting to git DB...')
+        self.engine = create_engine(
+            'mysql+mysqlconnector://{}:{}@{}/{}'.format(self.gitdbuser, self.gitdbpass, self.gitdbhostname, self.schema))
+        self.engine.connect()
+        Session = sessionmaker(bind=self.engine)
+        self.session = Session()
+        gitdbTable = TableReflector(self.engine, self.schema)
         self.log = gitdbTable('scmlog')
         self.people = gitdbTable('people')
 
@@ -348,15 +385,15 @@ class JIRADB(object):
         :return: a minimal list of the top contributors
         """
         assert 0 <= requiredCommitCoverage <= 1
-        requiredCommitCount = requiredCommitCoverage * self.projectCommitCounts[project]
+        requiredCommitCount = requiredCommitCoverage * self.session.query(func.sum(EmailProjectCommitCount.commitcount)).filter(EmailProjectCommitCount.project == project).first()[0]
         coveredCommitCount = 0
         topContributors = []
         # Get the list of contributors, ordered by commit count, ascending
-        subq = self.session.query(Contributor.id,
-                                func.sum(AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label(
-                                    'commitcount')).select_from(Contributor).join(ContributorAccount).join(
-            AccountProject).filter(AccountProject.project == project).group_by(Contributor).subquery()
-        contributorCommits = self.session.query(subq).order_by(asc('commitcount')).all()
+        subq = self.session.query(Contributor.id, ContributorAccount.email, EmailProjectCommitCount.commitcount).join(
+            ContributorAccount).join(EmailProjectCommitCount,
+                                     EmailProjectCommitCount.email == ContributorAccount.email).filter(EmailProjectCommitCount.project == project).distinct().subquery()
+        subq2 = self.session.query(subq.c.id, func.sum(subq.c.commitcount).label('commitcount')).group_by(subq.c.id).subquery()
+        contributorCommits = self.session.query(subq2).order_by(asc('commitcount')).all()
         # Append to topContributors until we have sufficient commit coverage
         while coveredCommitCount < requiredCommitCount:
             contributorCommitTuple = contributorCommits.pop()
@@ -438,7 +475,7 @@ class JIRADB(object):
                     self.session.add(newCompanyProject)
 
             # Delete existing entries for this project related to contribution activity
-            for table in [Issue, IssueAssignment, AccountProject]:
+            for table in [Issue, IssueAssignment, AccountProject, EmailProjectCommitCount]:
                 log.info("deleted %d entries for project %s",
                          self.deleteRows(table, func.lower(table.project) == func.lower(project)), project)
 
@@ -468,7 +505,7 @@ class JIRADB(object):
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
 
             # Get DB containing git data for this project
-            gitDB = GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname)
+            gitDB = self.getGitDB(project)
 
             # Verify that there are enough commits
             if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > self.startDate.strftime(CVSANALY_TIME_FORMAT),
@@ -581,6 +618,9 @@ class JIRADB(object):
             log.info("Refreshed DB for project %s", project)
         self.session.commit()
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
+
+    def getGitDB(self, project):
+        return GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname)
 
     def waitForRateLimit(self, resourceType):
         """resourceType can be 'search' or 'core'."""
@@ -876,6 +916,10 @@ class JIRADB(object):
                             BHCommitCount += 1
                         else:
                             NonBHCommitCount += 1
+
+            # If we have not seen commits from this email to this project, record it now
+            if self.session.query(EmailProjectCommitCount).filter(EmailProjectCommitCount.email == contributorEmail, EmailProjectCommitCount.project == project).count() == 0:
+                self.session.add(EmailProjectCommitCount(email=contributorEmail, project=project, commitcount=BHCommitCount + NonBHCommitCount))
 
             log.debug("Adding new AccountProject for %s account %s on project %s", contributorAccount.service,
                       contributorAccount.username, project)
