@@ -1,26 +1,26 @@
-import time
-import logging
-import re
 import getpass
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc, func
-from subprocess import call
+import logging
 import os
+import re
+import time
 from datetime import datetime, MAXYEAR, MINYEAR
+from enum import Enum
+from subprocess import call
 
-from github3.null import NullObject
+import pythonwhois
+import pytz
+from apiclient.errors import HttpError
+from github3 import GitHub, login
 from github3.exceptions import UnprocessableEntity
+from github3.null import NullObject
+from jira import JIRA
+from jira.exceptions import JIRAError
+from requests.exceptions import ConnectionError
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, aliased
 from sqlalchemy.orm import sessionmaker
-from jira import JIRA
-from jira.exceptions import JIRAError
-import pythonwhois
-from github3 import GitHub, login
-from apiclient.errors import HttpError
-import pytz
-from requests.exceptions import ConnectionError
-from enum import Enum
 
 GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
 
@@ -39,7 +39,7 @@ try:
 
     canGetEmployers = True
 except ImportError:
-    log.warning('No mechanism available to get employer names.')
+    print('No mechanism available to get employer names.')
     canGetEmployers = False
 
 VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol.com", "outlook.com", "live.com",
