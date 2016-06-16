@@ -184,3 +184,31 @@ getMinedProjects <- function() {
 writeFeatureTables <- function(projects) {
     sapply(projects, function(project)write.csv(buildFeatureTable(project), paste(project, ".csv", sep = ""), row.names = FALSE))
 }
+
+getContributorRows <- function(contributorID) {
+    queryDatabase(paste("select * from contributors inner join contributoraccounts ca on contributors.id=ca.contributors_id inner join accountprojects ap on ca.id=ap.contributoraccounts_id where contributors.id=", contributorID, sep = ""))
+}
+
+getRowsForContributors <- function(contributorIDs) {
+    do.call(rbind.data.frame, lapply(contributorIDs, getContributorRows))
+}
+
+getTop10Contributors <- function(tableFile) {
+    csvFile <- read.csv(tableFile)
+    filteredTable <- csvFile[csvFile$BHCommitCountSum + csvFile$NonBHCommitCountSum > 0,]
+    topContributors <- filteredTable[order(filteredTable$BHCommitCountSum + filteredTable$NonBHCommitCountSum, decreasing = TRUE), "contributorId"][1:10]
+    if (length(topContributors[is.na(topContributors)]) > 0) {
+        print(tableFile)
+    }
+    topContributors
+}
+
+getProjectDataPath <- function(project) {
+    paste("contributorData/", project, ".csv", sep = "")
+}
+
+getTopContributorsForProjects <- function(projects) {
+    projectPaths <- sapply(projects, getProjectDataPath)
+    listsOfTopContributors <- sapply(projectPaths, getTop10Contributors)
+    c(listsOfTopContributors)
+}
