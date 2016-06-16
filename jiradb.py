@@ -222,6 +222,13 @@ class GoogleCache(Base):
                       )
 
 
+class CompanyProjectEdge(Base):
+    __table__ = Table('companyprojectedges', Base.metadata,
+                      Column('company', String(128), primary_key=True),
+                      Column('project', String(32), primary_key=True),
+                      Column('commits', Integer)
+                      )
+
 class WhoisError(Enum):
     NO_ERR = 0
     NO_CONTACT_INFO = 1
@@ -374,6 +381,38 @@ class JIRADB(object):
             self.gh = GitHub()
         if self.gitdbpass is None:
             self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
+
+    def buildCompanyProjectNetwork(self, projects, requiredCommitCoverage):
+        """
+        Creates an edge list from companies to the projects they contribute to, using the commit counts as edge values.
+
+        :param requiredCommitCoverage: fraction of commits in each project that must be covered
+        :param projects: a list of projects to include
+        """
+        for project in projects:
+            topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+            # get AccountProjects of these contributors for this project
+            topContributorAccounts = self.session.query(Contributor).join(ContributorAccount).join(
+                AccountProject).filter(
+                Contributor.id.in_(topContributorIds), AccountProject.project == project)
+            for account in topContributorAccounts:
+                # create company-project edge if not exists
+                edge = self.session.query(CompanyProjectEdge).filter(
+                    CompanyProjectEdge.company == account.LinkedInEmployer,
+                    CompanyProjectEdge.project == project).one_or_none()
+                if edge is None:
+                    edge = CompanyProjectEdge(company=account.LinkedInEmployer, project=project, commits=0)
+                # add commits to edge
+                edge.commits += account.BHCommitCount + account.NonBHCommitCount
+                self.session.add(edge)
+
+    def updateTopContributorEmployers(self, project: str, requiredCommitCoverage: float, delayBetweenQueries: int):
+        topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+        topContributorAccounts = self.session.query(Contributor).join(ContributorAccount).filter(
+            Contributor.id.in_(topContributorIds))
+        for account in topContributorAccounts:
+            self.getLinkedInEmployer(account.displayName, project)
+            time.sleep(delayBetweenQueries)
 
     def getTopContributors(self, project: str, requiredCommitCoverage: float):
         """
