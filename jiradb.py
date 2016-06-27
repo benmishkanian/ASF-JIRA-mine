@@ -16,7 +16,8 @@ from github3.null import NullObject
 from jira import JIRA
 from jira.exceptions import JIRAError
 from requests.exceptions import ConnectionError
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc, func
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Table, VARCHAR, MetaData, asc, desc, \
+    func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, aliased
@@ -389,22 +390,38 @@ class JIRADB(object):
         :param requiredCommitCoverage: fraction of commits in each project that must be covered
         :param projects: a list of projects to include
         """
+        missedCommitsDict = dict()
         for project in projects:
+            # delete prior data
+            self.deleteRows(CompanyProjectEdge, func.lower(CompanyProjectEdge.project) == func.lower(project))
             topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
             # get AccountProjects of these contributors for this project
-            topContributorAccounts = self.session.query(Contributor).join(ContributorAccount).join(
+            topContributorAccounts = self.session.query(Contributor, AccountProject.BHCommitCount,
+                                                        AccountProject.NonBHCommitCount).join(ContributorAccount).join(
                 AccountProject).filter(
                 Contributor.id.in_(topContributorIds), AccountProject.project == project)
+            missedCommitsDict[project] = [0, 0]
             for account in topContributorAccounts:
-                # create company-project edge if not exists
-                edge = self.session.query(CompanyProjectEdge).filter(
-                    CompanyProjectEdge.company == account.LinkedInEmployer,
-                    CompanyProjectEdge.project == project).one_or_none()
-                if edge is None:
-                    edge = CompanyProjectEdge(company=account.LinkedInEmployer, project=project, commits=0)
-                # add commits to edge
-                edge.commits += account.BHCommitCount + account.NonBHCommitCount
-                self.session.add(edge)
+                accountCommits = account.BHCommitCount + account.NonBHCommitCount
+                companyAttribution = self.getLikelyLinkedInEmployer(account.Contributor.id)
+                if companyAttribution is not None and companyAttribution != '':
+                    # create company-project edge if not exists
+                    edge = self.session.query(CompanyProjectEdge).filter(
+                        CompanyProjectEdge.company == companyAttribution,
+                        CompanyProjectEdge.project == project).one_or_none()
+                    if edge is None:
+                        edge = CompanyProjectEdge(company=companyAttribution, project=project, commits=0)
+                    # add commits to edge
+                    edge.commits += accountCommits
+                    self.session.add(edge)
+                    # add to total commit count
+                    missedCommitsDict[project][1] += accountCommits
+                else:
+                    log.warning('No company attribution found for contributor # %s', account.Contributor.id)
+                    # keep track of missed commit company attribution
+                    missedCommitsDict[project][0] += accountCommits
+                    missedCommitsDict[project][1] += accountCommits
+        return missedCommitsDict
 
     def updateTopContributorEmployers(self, project: str, requiredCommitCoverage: float, delayBetweenQueries: int):
         topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
@@ -413,6 +430,12 @@ class JIRADB(object):
         for account in topContributorAccounts:
             self.getLinkedInEmployer(account.displayName, project)
             time.sleep(delayBetweenQueries)
+
+    def getImportantAccounts(self, project, requiredCommitCoverage):
+        topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+        # get accounts of these contributors
+        return self.session.query(ContributorAccount.displayName).filter(
+            ContributorAccount.contributors_id.in_(topContributorIds))
 
     def getTopContributors(self, project: str, requiredCommitCoverage: float):
         """
@@ -972,6 +995,37 @@ class JIRADB(object):
             self.session.add(accountProject)
 
         return accountProject
+
+    def getProjectCompaniesByCommits(self, project):
+        companiesByCommitsSubquery = self.session.query(AccountProject.LinkedInEmployer, func.sum(
+            AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).filter(
+            AccountProject.project == project).group_by(AccountProject.LinkedInEmployer).subquery()
+        return self.session.query(companiesByCommitsSubquery).order_by(desc('commitcount'))
+
+    def getLikelyLinkedInEmployer(self, contributorId):
+        """
+        Gets a list of possible employers for the contributor based off of the employer of each of their accounts.
+        :param contributorId:
+        :return:
+        """
+        accountProjectRows = self.session.query(Contributor, AccountProject.LinkedInEmployer,
+                                                AccountProject.project).join(ContributorAccount).join(
+            AccountProject).filter(Contributor.id == contributorId)
+        possibleEmployers = []
+        projects = []
+        for accountProjectRow in accountProjectRows:
+            if accountProjectRow.LinkedInEmployer not in possibleEmployers:
+                possibleEmployers.append(accountProjectRow.LinkedInEmployer)
+            if accountProjectRow.project not in projects:
+                projects.append(accountProjectRow.project)
+        # TODO: not sure how best to handle a contributor having multiple projects
+        log.info('contributor # %s has multiple projects: %s', contributorId, projects)
+        companyRankings = self.getProjectCompaniesByCommits(projects[0])
+        for companyRanking in companyRankings:
+            if companyRanking.LinkedInEmployer in possibleEmployers:
+                return companyRanking.LinkedInEmployer
+        log.warning('%s has uncommon employer; taking first of: %s', contributorId, possibleEmployers)
+        return possibleEmployers[0]
 
     def getLinkedInEmployer(self, displayName, project):
         # Try to get LinkedIn information from the Google cache

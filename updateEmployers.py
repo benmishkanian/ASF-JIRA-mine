@@ -32,7 +32,7 @@ if __name__ == "__main__":
     projectList = args['projects']
     for project in projectList:
         log.info('Updating employers for contributors to project ' + project)
-        accountProjectRows = jiradb.getAccountProjectRows(project)
+        accountProjectRows = jiradb.getImportantAccounts(project, 0.80)
         for accountProjectRow in accountProjectRows:
             log.debug('Updating employer of ' + accountProjectRow.displayName)
             # update googlecache rows
