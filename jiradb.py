@@ -421,6 +421,7 @@ class JIRADB(object):
                     # keep track of missed commit company attribution
                     missedCommitsDict[project][0] += accountCommits
                     missedCommitsDict[project][1] += accountCommits
+        self.session.commit()
         return missedCommitsDict
 
     def updateTopContributorEmployers(self, project: str, requiredCommitCoverage: float, delayBetweenQueries: int):
@@ -1018,9 +1019,21 @@ class JIRADB(object):
                 possibleEmployers.append(accountProjectRow.LinkedInEmployer)
             if accountProjectRow.project not in projects:
                 projects.append(accountProjectRow.project)
-        # TODO: not sure how best to handle a contributor having multiple projects
-        log.info('contributor # %s has multiple projects: %s', contributorId, projects)
-        companyRankings = self.getProjectCompaniesByCommits(projects[0])
+        if len(projects) == 1:
+            mainProject = projects[0]
+        elif len(projects) > 1:
+            # The main project is the one this person did the most commits to
+            countSubq = self.session.query(AccountProject.project, func.sum(
+                AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).join(
+                ContributorAccount).join(Contributor).filter(Contributor.id == contributorId).group_by(
+                AccountProject.project).subquery()
+            mainRow = self.session.query(countSubq).order_by(desc('commitcount')).first()
+            assert mainRow is not None, 'Found 0 projects for contributor ' + contributorId
+            mainProject = mainRow.project
+        else:
+            raise RuntimeError('contributor {} has no projects'.format(contributorId))
+        log.info('contributor # %s contributed to project(s): %s', contributorId, projects)
+        companyRankings = self.getProjectCompaniesByCommits(mainProject)
         for companyRanking in companyRankings:
             if companyRanking.LinkedInEmployer in possibleEmployers:
                 return companyRanking.LinkedInEmployer
