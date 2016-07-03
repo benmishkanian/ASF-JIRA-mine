@@ -36,7 +36,7 @@ if __name__ == "__main__":
         for accountProjectRow in accountProjectRows:
             log.debug('Updating employer of ' + accountProjectRow.displayName)
             # update googlecache rows
-            time.sleep(10)
+            time.sleep(60)
             jiradb.getLinkedInEmployer(accountProjectRow.displayName, project)
             waitForSearchQuota(jiradb)
         # flush DB

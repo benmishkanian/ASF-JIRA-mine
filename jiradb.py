@@ -1,3 +1,4 @@
+import csv
 import getpass
 import logging
 import os
@@ -230,6 +231,7 @@ class CompanyProjectEdge(Base):
                       Column('commits', Integer)
                       )
 
+
 class WhoisError(Enum):
     NO_ERR = 0
     NO_CONTACT_INFO = 1
@@ -401,6 +403,7 @@ class JIRADB(object):
                 AccountProject).filter(
                 Contributor.id.in_(topContributorIds), AccountProject.project == project)
             missedCommitsDict[project] = [0, 0]
+            missedContributorIds = []
             for account in topContributorAccounts:
                 accountCommits = account.BHCommitCount + account.NonBHCommitCount
                 companyAttribution = self.getLikelyLinkedInEmployer(account.Contributor.id)
@@ -418,10 +421,32 @@ class JIRADB(object):
                     missedCommitsDict[project][1] += accountCommits
                 else:
                     log.warning('No company attribution found for contributor # %s', account.Contributor.id)
+                    if account.Contributor.id not in missedContributorIds:
+                        missedContributorIds.append(account.Contributor.id)
                     # keep track of missed commit company attribution
                     missedCommitsDict[project][0] += accountCommits
                     missedCommitsDict[project][1] += accountCommits
-        self.session.commit()
+            # write info for missing accounts to worksheet
+            requiredAccountRows = self.session.query(Contributor, ContributorAccount, AccountProject).join(
+                ContributorAccount).join(AccountProject).filter(Contributor.id.in_(missedContributorIds)).order_by(
+                asc(Contributor.id)).all()
+            with open(project + '.csv', 'w', newline='') as worksheet:
+                worksheetWriter = csv.writer(worksheet)
+                # write csv header
+                worksheetWriter.writerow(
+                    ['id', 'ghLogin', 'ghProfileCompany', 'ghProfileLocation', 'username', 'service', 'displayName',
+                     'email', 'project'])
+                for requiredAccountRow in requiredAccountRows:
+                    worksheetWriter.writerow([requiredAccountRow.Contributor.id, requiredAccountRow.Contributor.ghLogin,
+                                              requiredAccountRow.Contributor.ghProfileCompany,
+                                              requiredAccountRow.Contributor.ghProfileLocation,
+                                              requiredAccountRow.ContributorAccount.username,
+                                              requiredAccountRow.ContributorAccount.service,
+                                              requiredAccountRow.ContributorAccount.displayName,
+                                              requiredAccountRow.ContributorAccount.email,
+                                              requiredAccountRow.AccountProject.project
+                                              ])
+            self.session.commit()
         return missedCommitsDict
 
     def updateTopContributorEmployers(self, project: str, requiredCommitCoverage: float, delayBetweenQueries: int):
