@@ -163,6 +163,14 @@ class AccountProject(Base):
     account = relationship("ContributorAccount")
 
 
+class ContributorCompany(Base):
+    __table__ = Table('contributorcompanies', Base.metadata,
+                      Column('contributors_id', Integer, ForeignKey("contributors.id"), primary_key=True),
+                      Column('company', String(128))
+                      )
+    contributor = relationship("Contributor")
+
+
 class EmailProjectCommitCount(Base):
     __table__ = Table('emailprojectcommitcounts', Base.metadata,
                       Column('email', String(64), primary_key=True),
@@ -384,6 +392,22 @@ class JIRADB(object):
             self.gh = GitHub()
         if self.gitdbpass is None:
             self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
+
+    def buildContributorCompanyTable(self, projects, requiredCommitCoverage):
+        for project in projects:
+            topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+            for contributorId in topContributorIds:
+                # get row if not exists
+                contributorCompany = self.session.query(ContributorCompany).filter(
+                    ContributorCompany.contributors_id == contributorId).first()
+                if contributorCompany is None:
+                    contributorCompany = ContributorCompany(
+                        contributor=self.session.query(Contributor).filter(Contributor.id == contributorId).one(),
+                        company=None)
+                if contributorCompany.company is None:
+                    contributorCompany.company = self.getLikelyLinkedInEmployer(contributorId)
+                    self.session.add(contributorCompany)
+            self.session.commit()
 
     def buildCompanyProjectNetwork(self, projects, requiredCommitCoverage):
         """

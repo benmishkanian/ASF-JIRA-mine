@@ -17,12 +17,12 @@ if __name__ == "__main__":
     ch.setFormatter(logging.Formatter('%(message)s'))
     log.addHandler(ch)
     # Add file log handler
-    fh = logging.FileHandler('updateEmployers.log')
+    fh = logging.FileHandler('buildContributorCompany.log')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(fh)
     # Add error file log handler
-    efh = logging.FileHandler('updateEmployersErrors.log')
+    efh = logging.FileHandler('buildContributorCompanyErrors.log')
     efh.setLevel(logging.ERROR)
     efh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
     log.addHandler(efh)
@@ -30,15 +30,5 @@ if __name__ == "__main__":
     args = getArguments()
     jiradb = JIRADB(**args)
     projectList = args['projects']
-    for project in projectList:
-        log.info('Updating employers for contributors to project ' + project)
-        accountProjectRows = jiradb.getImportantAccounts(project, 0.80)
-        for accountProjectRow in accountProjectRows:
-            log.debug('Updating employer of ' + accountProjectRow.displayName)
-            # update googlecache rows
-            time.sleep(300)
-            jiradb.getLinkedInEmployer(accountProjectRow.displayName, project)
-            waitForSearchQuota(jiradb)
-        # flush DB
-        jiradb.session.commit()
-    log.info('Done updating employers for all contributors for all projects')
+    jiradb.buildContributorCompanyTable(projectList, 0.80)
+    log.info('Done updating contributorcompanies for all contributors for all projects')
