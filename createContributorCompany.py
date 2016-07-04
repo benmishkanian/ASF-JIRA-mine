@@ -1,14 +1,5 @@
 from jiradb import *
 
-
-def waitForSearchQuota(jiradb):
-    if not jiradb.googleSearchEnabled:
-        jiradb.session.commit()
-        log.warn('Exhausted search quota. Waiting a day...')
-        time.sleep(60 * 60 * 24)
-        jiradb.googleSearchEnabled = True
-
-
 if __name__ == "__main__":
     log.setLevel(logging.DEBUG)
     # Add console log handler
