@@ -1,0 +1,207 @@
+\documentclass[12pt,draft]{ucdthesis}
+
+% this is the version that grad studies wants
+% \documentclass[11pt,oneside,final]{ucdthesis}
+
+% need this for the \foreach command
+\usepackage{tikz}
+\dsp
+% spacing in figures and tables and their captions can be
+% changed here (\ssp for single-space, empty for same as surrounding
+% text); for this to work, the command \figsp has to be included
+% in every figure and table right after the \begin{figure}
+% \def\figsp{\ssp}
+%\def\figsp{}
+
+
+% useful for drafts
+% line numbers:
+% http://www.ctan.org/tex-archive/help/Catalogue/entries/lineno.html
+%
+% \usepackage{lineno}
+
+% customized headers
+%
+% http://www.ctan.org/tex-archive/help/Catalogue/entries/fancyhdr.html
+% \usepackage{fancyhdr}
+
+% a better verbatim environment: c/o Pete Dirac
+% use like this:
+%   \begin{Verbatim}[fontsize=8]
+%       foobar
+%    \end{Verbatim}
+% \usepackage{fancyvrb}
+
+
+% more flexible math support
+\usepackage{amsmath}
+
+% allow some pages to be landscape
+\usepackage{lscape}
+
+% more flexible definition of table environments
+\usepackage{ctable}
+
+%need this for \includegraphics{}
+\usepackage{graphicx}
+
+%enable the listings package specifically for including programming code
+\usepackage{listings}
+
+%Special hack to make code listings not break pages, fyi they must be short then
+\usepackage{float}
+\floatstyle{plain} % optionally change the style of the new float
+\newfloat{Code}{H}{myc}
+
+%test alternative to listings package minted which requires the python pygments package
+%minted was installed to latex by hand
+%\usepackage{minted}
+
+ % PDF links --- > breaks with some bibliography entries
+% \usepackage{hyperref}
+
+% nice looking, parenthetical references
+\usepackage[sorting=nyt,natbib=true,citestyle=authoryear,bibstyle=authoryear,maxnames=3,refsection
+=chapter]{biblatex}
+%\usepackage{chapterbib} % incompatible with biblatex
+\bibliography{proposal}
+\defbibheading{bibliography}{%
+	\section{References}
+	}
+	
+% bibliography can be single-spaced for UC thesis format
+\appto{\bibsetup}{\ssp}
+	
+
+%make the index
+% \usepackage{makeidx}
+% \makeindex
+
+% custom colors
+\usepackage{color}
+% make a color for comments
+\definecolor{MyDarkBlue}{rgb}{0,0.08,0.45}
+
+% customized captions with bold label and small, italic text
+% table captions are located above tables
+% http://www.kronto.org/thesis/tips/custom-captions.html
+% http://www.ctan.org/tex-archive/macros/latex/contrib/caption/
+% does this have any effect?
+%\usepackage{caption}
+% \renewcommand{\captionfont}{\small\itshape}
+%
+\usepackage[hypcap,font=singlespacing]{caption}
+\usepackage{subcaption}
+% modern method for setting up captions\
+\captionsetup{margin=10pt,font=small,labelfont=bf}
+%
+% fix so that table captions have correct spacing
+\captionsetup[table]{position=top}
+
+
+
+% %
+% %  fit more material on the page:
+% %
+%
+% reset some float-controlling parameters
+\renewcommand{\floatpagefraction}{0.8}	% require fuller float pages
+
+% N.B.: floatpagefraction MUST be less than topfraction !!
+\renewcommand{\topfraction}{0.9}	% max fraction of floats at top
+\renewcommand{\bottomfraction}{0.8}	% max fraction of floats at bottom
+
+
+% PDF formatting options, indexing, hyperlinking, with control over link style
+%Set PDF Metadata
+\usepackage[pdftex,
+            pdfauthor={Author Name},
+            pdftitle={Title Here},
+            pdfsubject={Subject},
+            pdfkeywords={Comma, List, Keywords},
+            %pdfproducer={Latex with hyperref, or other system},
+            %pdfcreator={pdflatex, or other tool}
+            ]{hyperref}
+\hypersetup{
+	%driver=pdftex,
+	colorlinks=true,
+	urlcolor=blue,
+	linkcolor=blue,          % color of internal links
+    citecolor=blue,        % color of links to bibliography
+    filecolor=magenta
+}
+
+%Use an additional package to make bookmarks point to the top to tables, figures and listings
+\usepackage[all]{hypcap}
+
+%Alex's customizations
+\usepackage{indentfirst} %Indents first paragraph of chapter
+\usepackage{datatool} %Allows import of csv and other data-tables
+\usepackage{varwidth}
+\usepackage{color}
+\usepackage{rotating}
+\AtEveryBibitem{\clearfield{month}} %Cleaner references without month being printed
+
+\addtolength{\oddsidemargin}{-0.4in}
+
+%%% Document Portion:
+\begin{document}
+
+
+%
+%% Title, Front Matter, and Abstract:
+\input{title_and_frontmatter}
+
+%
+% the chapters
+%
+
+% set page style:
+% make the chapter and section smaller, chapter and section numbers are removed
+% fancyplain will keep the page numbers at the bottom of all pages
+%\pagestyle{fancyplain} %Note the \fancyplain command !!!
+%\renewcommand{\chaptermark}[1]{\markboth{\small{#1}}{}}
+%\renewcommand{\sectionmark}[1]{\markright{\small{#1}}{}}
+
+
+% TODO: this is only for draft copies !!
+% start line number printing
+%
+% \linenumbers
+
+
+
+% chapter 1
+\include{chapter1} %This looks for chapter1.tex
+
+% chapter 2
+\include{chapter2} %This looks for chapter2.tex
+
+
+
+% note that the 'plainnat' style does not allow URL's in the bibtex entry
+%
+% some ideas here:
+% http://bib2web.djvuzone.org/bibtex.html
+%
+
+% reset the page style
+%\pagestyle{plain}
+
+
+% To enable this it will need to be added to toc so it's not in a chapter
+%\printbibliography[heading=bibliography]
+
+% the appendix:
+% there are several sections, that don't really fit into the main chapters
+%
+\part*{\addcontentsline{toc}{part}{Appendices}Appendices}
+\appendix
+
+% reset page style to fancy
+%\pagestyle{fancyplain}
+
+ \input{appendix}
+
+
+\end{document}

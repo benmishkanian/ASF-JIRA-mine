@@ -1,0 +1,86 @@
+% Declarations for Front Matter
+
+% MS Thesis = 0, Phd Dissertation = 1
+\isdissertation{0}
+
+% electronic submission? Paper only = 0, Electronic = 1
+\iselectronic{1}
+
+\title{Organizational Social Networks in Apache Software Foundation Projects}
+\author{Benjamin David Mishkanian}
+
+% Choices are September, December, March, June
+\degreemonth{September}
+\degreeyear{2016}
+%More examples DOCTOR OF PHILOSOPHY
+\degree{Master of Science}
+
+\chair{Premkumar Devanbu}
+\othermembers{Vladimir Filkov,Cindy Rubio Gonz\'alez} %comma separated list of committee not including chair
+\numberofmembers{3} % size of committee
+
+\prevdegrees{B.S (University of California at Davis) 2014}
+
+%Your Graduate Group
+\field{Computer Science}
+\campus{Davis}
+
+
+% add the abstract here
+\input{abstract}
+
+%Not required for electronic submission, you will need to print your other abstract page 2x and hand them in.
+% Here is the first, external, abstract.
+%\begin{abstract}
+%	\myabstract
+%	\abstractsignature
+%\end{abstract}
+
+\begin{frontmatter}
+\maketitle
+
+% A copyright page is optional. If you have one, it must immediately
+% follow the title page. For more information about the copyright page
+% see the UCD's Office of Graduate Studies web site.
+% \copyrightpage
+
+% dedication (optional), remove comment markers to use 
+%\begin{dedication}
+%\null\vfil
+%{\large
+%\begin{center}
+%xxxx
+%\end{center}}
+%\vfil\null
+%\end{dedication}
+
+
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+% Here is the second, internal, abstract.
+% Update: Melissa Danforth 2006
+% Inline abstract is now part of front matter according to coordinator
+    \newpage
+    \begin{inlineabstract}
+		%Only enable small if you're trying to make it fit.		
+		%\begin{small}
+		\myabstract
+		%\end{small}
+		
+    \end{inlineabstract}
+
+%Acknowledgments (optional)
+\begin{acknowledgments}
+xxxxxxx
+\end{acknowledgments}
+
+%Preface (optional)
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+\input{preface}
+
+
+\end{frontmatter}
