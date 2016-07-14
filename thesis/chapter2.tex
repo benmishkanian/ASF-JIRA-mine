@@ -35,12 +35,32 @@ The following additional information is mined from Github accounts:
 \end{itemize}
 Furthermore, to work around the rate limit of the Github API, we utilized a GHTorrent.org database dump as an offline cache of Github data.
 
-\section{Data Collection Limitations}
+\section{Data Collection Constraints}
 Since a contributor’s employer name is information which can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for which we have no employer name. A further constraint is that if this information cannot be mined automatically for most people, it becomes infeasible to fill missing values in the dataset through manual inspection. After performing some case studies, we found that this can be a significant problem for larger projects such as Apache Kafka, which have many individual committers. However, we found that the vast majority of commits to a project typically came from a small group of the committers, for which we could more easily find their employer. For this reason, we limited our data collection to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project for the time period under observation. This also had the effect of improving the number of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
 An additional constraint was that we only mined data for ASF projects that met the following constraints:
 \begin{itemize}
-	\item Project is listed in the GHTorrent.org database
-	\item Project has a JIRA hosted at issues.apache.org/jira/
-	\item At least 20 commits were done to the project within the period of observation
+	\item The project is listed in the GHTorrent.org database
+	\item The project has a JIRA hosted at \ASFJIRAURL
+	\item At least 20 commits were done to the project within the period under observation
 \end{itemize}
-These constraints allowed us to exclude projects which lacked sufficient data to analyze.
+These constraints resulted in the exclusion of projects which lacked sufficient data to analyze.
+% TODO: enumerate set of projects mined
+
+\section{Data Collection Algorithm}
+The script jiradb.py performs the majority of the data gathering. Its algorithm can be summarized as follows:
+\begin{enumerate}
+	\item Get JIRA account data for contributors to the JIRA of the projects
+	\item Get Git account and commit data for committers to the projects
+	\item Get Github account data for Git accounts
+	\item Associate accounts belonging to a single person under a single contributor ID
+\end{enumerate}
+The following sections provide more details on these steps.
+
+\subsection{JIRA Data}
+The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JQL (JIRA Query Language). The following JQL query was used to 
+\begin{verbatim}
+project = "{0}" AND created < "{1}" AND (created > "{2}" OR resolved < "{1}")
+\end{verbatim}
+\subsection{Git Data}
+\subsection{Github Data}
+\subsection{Identity Merging}
