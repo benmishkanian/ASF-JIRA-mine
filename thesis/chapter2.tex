@@ -65,9 +65,10 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 The following sections provide more details on these steps.
 
 \subsection{JIRA Data}
-The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JQL (JIRA Query Language). The following JQL query was used to 
+The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JQL (JIRA Query Language). The following JQL query was used to download issues for project P that were either created or resolved in \timeperiod.
+% TODO: replace format specifiers with actual values from mineProjects.sh
 \begin{verbatim}
-project = "{0}" AND created < "{1}" AND (created > "{2}" OR resolved < "{1}")
+project = "P" AND created < "{1}" AND (created > "{2}" OR resolved < "{1}")
 \end{verbatim}
 \subsection{Git Data}
 \subsection{Github Data}
