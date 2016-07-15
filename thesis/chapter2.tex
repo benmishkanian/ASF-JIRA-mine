@@ -57,19 +57,20 @@ These constraints resulted in the exclusion of projects which lacked sufficient 
 \section{Data Collection Algorithm}
 The script jiradb.py performs the majority of the data gathering. Its algorithm can be summarized as follows:
 \begin{enumerate}
-	\item Get JIRA account data for contributors to the JIRA of the projects
+	\item Get JIRA account data for contributors to the JIRAs of the projects
 	\item Get Git account and commit data for committers to the projects
 	\item Get Github account data for Git accounts
 	\item Associate accounts belonging to a single person under a single contributor ID
 \end{enumerate}
-The following sections provide more details on these steps.
+Each individual set of profile data is stored in a row of the \textbf{accountprojects} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
 \subsection{JIRA Data}
-The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JQL (JIRA Query Language). The following JQL query was used to download issues for project P that were either created or resolved in \timeperiod.
-% TODO: replace format specifiers with actual values from mineProjects.sh
+The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JQL (JIRA Query Language). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod.
 \begin{verbatim}
-project = "P" AND created < "{1}" AND (created > "{2}" OR resolved < "{1}")
+project = "P" AND created < "2016-06-01 00:00" AND (created > "2016-01-01 00:00" OR resolved < "2016-06-01 00:00")
 \end{verbatim}
+After the issues were downloaded, each issue's metadata and history was mined to find JIRA accounts that either created or resolved the issue in \timeperiod. The profile information for each account was stored as an entry in \textbf{accountprojects}.
 \subsection{Git Data}
+The cvsanaly tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, for each commit author in the project, the author's git account information was inserted into \textbf{accountprojects}, along with the number of commits they authored in \timeperiod.
 \subsection{Github Data}
 \subsection{Identity Merging}
