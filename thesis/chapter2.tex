@@ -71,7 +71,15 @@ project = "P" AND created < "2016-06-01 00:00" AND (created > "2016-01-01 00:00"
 \end{verbatim}
 After the issues were downloaded, each issue's metadata and history was mined to find JIRA accounts that either created or resolved the issue in \timeperiod. The profile information for each account was stored as an entry in \textbf{accountprojects}.
 \subsection{Git Data}
-The cvsanaly tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit's author's git account information was inserted into \textbf{accountprojects}, along with the number of commits they authored in \timeperiod.
+The cvsanaly tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, the git account information was inserted into \textbf{accountprojects}, along with the number of commits they authored for the project in \timeperiod.
+
+Technically, Github allows an email address to be associated with only one account, but due to errors in the GHTorrent dataset, this constraint cannot be relied upon. To mitigate this problem, a row in \textbf{accountprojects} is created for each possible Github username linked with the git account, but
 \subsection{Github Data}
 Whenever a new Git or JIRA account was processed, the account information was used to query the GHTorrent database to find the associated Github account. Matching against Git account information was typically more reliable than using JIRA, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address, so the accounts could be associated through that.
 \subsection{Identity Merging}
+Two accounts were considered to belong to the same person when at least one of the following was true:
+\begin{itemize}
+	\item The accounts use the same email address
+	\item The accounts use the same username and service (i.e. Git or JIRA)
+\end{itemize}
+The only exception to these rules was that accounts which used the email ``dev-null@apache.org'' were not merged based on the email alone, because this is a shared email address used by multiple ASF contributors. For the purpose of merging accounts, Git and Github were considered to belong to the same service.
