@@ -482,6 +482,13 @@ class JIRADB(object):
             time.sleep(delayBetweenQueries)
 
     def getImportantAccounts(self, project, requiredCommitCoverage):
+        """
+        Returns the display names of accounts of top contributors for the given project.
+
+        :param project: name of the project
+        :param requiredCommitCoverage: percentage of commit
+        :return:
+        """
         topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
         # get accounts of these contributors
         return self.session.query(ContributorAccount.displayName).filter(
@@ -1047,6 +1054,12 @@ class JIRADB(object):
         return accountProject
 
     def getProjectCompaniesByCommits(self, project):
+        """
+        Gets (organization, commitcount) for this project, ordered by commitcount descending. Organizations are obtained
+        from AccountProject.LinkedInEmployer.
+        :param project: The project for which commitcounts should be aggregated
+        :return: Organizations ranked by commit count for this project
+        """
         companiesByCommitsSubquery = self.session.query(AccountProject.LinkedInEmployer, func.sum(
             AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).filter(
             AccountProject.project == project).group_by(AccountProject.LinkedInEmployer).subquery()
