@@ -1,12 +1,15 @@
 \chapter{Data Collection}
 
 \section{Initial Research Question and Data Collection}
-The original research question for this project was to identify differences in commit behavior between paid and volunteer contributors of open source projects. In order to classify contributors as paid or volunteer, a script was written which collects data from various public online profiles of ASF contributors active in 2015 and computes several heuristics which can then be used as features of a classifier. However, two issues made it difficult to identify the differences between the two classes:
+
+The original intent of this research project was to identify differences in commit behavior between paid and volunteer contributors of open source projects. In order to classify contributors as paid or volunteer, a script was written which collected data from various public online profiles of ASF contributors active in 2015 and computed several heuristics;  the intent was to use some of this data features 
+to classify individuals as paid or volunteer. 
+ However, two issues made it difficult to identify the differences between the two classes:
 \begin{enumerate}
 	\item \label{manypaid} For a given ASF project and time period, the proportion of active contributors who are paid to work on the project can be very high, sometimes nearing 100\%.
 	\item \label{novolunteers} A profile can contain certain markers that are highly correlated with paid contributors, but there are no known markers that are highly correlated with volunteer contributors.
 \end{enumerate}
-Issue \#\ref{manypaid} was a surprising finding in its own right---one might expect there to be a somewhat even mix of paid and volunteer contributors, but while doing a manual classification of a couple projects, it was discovered that these projects were almost exclusively developed by employees of a few companies during the time period under observation. With such skewed samples, it became difficult to write a classifier sensitive enough to be useful.
+Issue \#\ref{manypaid} was \emph{prima facie} quite surprising---one might expect there to be a somewhat even mix of paid and volunteer contributors, but upon manually examining contributors to a couple projects, it was discovered that these projects were almost exclusively developed by employees of a few companies during the time period under observation. With such skewed samples, it became difficult to write a classifier sensitive enough to be useful.
 Issue \#\ref{novolunteers} was an unforeseen limitation of using profile information to identify social group affiliation. Ultimately, there was no reliable way to differentiate between a volunteer and a paid contributor when his/her data does not reveal any obvious link between his/her contributions and his/her employer.
 Since creating this classifier proved infeasible, the data was re-purposed to do a social network analysis of ASF contributions instead. In particular, the following facets of the existing dataset were useful for this purpose:
 \begin{itemize}
@@ -15,8 +18,10 @@ Since creating this classifier proved infeasible, the data was re-purposed to do
 \end{itemize}
 
 \section{Data Sources}
-When researching open source software, there are a multitude of possible software repositories and organizations to base the experiment on. For example, some prior work studied SourceForge projects, while others studied GNOME. We chose to study Apache Software Foundation projects because they have a consistent organization structure with respect to how developers collaborate on Git, Github, and JIRA. This structure made it simpler to write a script that can reliably link user identities across these service.
-To find the employer of a given Git committer, the script attempts to collect data from the Git account, and any associated JIRA and/or Github accounts. It also utilizes the Google Custom Search API to find links to LinkedIn profiles, which can then be inspected manually. Each set of values is stored in a separate entry in a PostgreSQL database, to maximize the amount of information available for finding a contributorâ€™s employer.
+When researching open source software, there are a multitude of possible software repositories and organizations to base the experiment on. For example, some prior work studied SourceForge projects, while others studied GNOME. \pd{Reword this bit to first include some motivation, viz: For our work, we needed to reliably link user identities across different
+user functions. We needed this because...}
+We chose to study Apache Software Foundation projects because they have a consistent organization structure with respect to how developers collaborate on Git, Github, and JIRA. This structure made it simpler to write a script that can reliably link user identities across these service.
+To find the employer of a given Git committer, the script attempts to collect data from the Git account, and any associated JIRA and/or Github accounts. It also utilizes the Google Custom Search API to find links to LinkedIn profiles, which can then be inspected manually. Each set of values is stored in a separate entry in a PostgreSQL database, to maximize the amount of information available for finding a contributor'€™s employer.
 The following information is mined from Git, Github, and JIRA accounts:
 \begin{itemize}
 	\item Username
@@ -36,7 +41,7 @@ The following additional information is mined from Github accounts:
 Furthermore, to work around the rate limit of the Github API, the script utilized a GHTorrent.org database dump as an offline cache of Github data.
 
 \section{Data Collection Constraints}
-Since a contributorâ€™s employer name is information which can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for which no employer name could be found. A further constraint is that if this information cannot be mined automatically for most people, it becomes infeasible to fill missing values in the dataset through manual inspection. After performing some case studies, it was found that this can be a significant problem for larger projects such as Apache Kafka, which have many individual committers. However, the vast majority of commits to a project typically came from a small group of the committers, whose employers could more easily be found. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project for the time period under observation. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
+Since a contributor'€™s employer name can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for whom no employer name could be found. A further constraint is that if this information cannot be mined automatically for most people, it becomes infeasible to fill missing values in the dataset through manual inspection. After performing some case studies, it was found that this can be a significant problem for larger projects such as Apache Kafka, which have many individual committers. However, the vast majority of commits to a project typically came from a small group of the committers, whose employers could more easily be found. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project for the time period under observation. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
 An additional constraint was that only ASF projects which met the following conditions were considered:
 \begin{itemize}
 	\item The project is listed in the GHTorrent.org database
@@ -59,9 +64,9 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 \begin{enumerate}
 	\item Get JIRA account data for contributors to the JIRAs of the projects
 	\item Get Git account and commit data for committers to the projects
-	\item Get Github account data for Git accounts
-	\item Associate accounts belonging to a single person under a single contributor ID
-	\item Generate a guess for the employer of each contributor
+	\item Get Github account data for Git accounts 
+	\item Associate accounts belonging to a single person under a single contributor ID \pd{Explain how this done} 
+	\item Generate a guess for the employer of each contributor \pd{Explain how this is done} 
 \end{enumerate}
 Each individual set of profile data is stored in a row of the \textbf{accountprojects} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
