@@ -40,6 +40,8 @@ The following additional information is mined from Github accounts:
 \end{itemize}
 Furthermore, to work around the rate limit of the Github API, the script utilized a GHTorrent.org database dump as an offline cache of Github data.
 
+\pd{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects}
+
 \section{Data Collection Constraints}
 Since a contributor'€™s employer name can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for whom no employer name could be found. A further constraint is that if this information cannot be mined automatically for most people, it becomes infeasible to fill missing values in the dataset through manual inspection. After performing some case studies, it was found that this can be a significant problem for larger projects such as Apache Kafka, which have many individual committers. However, the vast majority of commits to a project typically came from a small group of the committers, whose employers could more easily be found. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project for the time period under observation. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
 An additional constraint was that only ASF projects which met the following conditions were considered:
@@ -68,9 +70,13 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 	\item Associate accounts belonging to a single person under a single contributor ID \pd{Explain how this done} 
 	\item Generate a guess for the employer of each contributor \pd{Explain how this is done} 
 \end{enumerate}
+
+
+
 Each individual set of profile data is stored in a row of the \textbf{accountprojects} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
 \subsection{JIRA Data}
+\pd{Use consistent typography for "JIRA"}
 The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod:
 \begin{lstlisting}
 project = "P" AND created < "2016-06-01 00:00" AND (created >
