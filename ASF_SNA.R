@@ -36,3 +36,26 @@ getCompanyEdgeList <- function() {
 getCompanyNetwork <- function() {
     network(getCompanyEdgeList(), directed = FALSE, matrix.type = "edgelist")
 }
+
+# Returns a data frame showing the total (Freeman) degree of each company
+getDegreeCentrality <- function(companyNetwork) {
+    cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), degree(companyNetwork, gmode="graph", diag = TRUE))
+}
+
+# Returns a data frame showing the standard undirected betweenness of each company, ignoring edge values
+getBetweennessCentrality <- function(companyNetwork) {
+    cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), betweenness(companyNetwork, gmode="graph", diag = TRUE, cmode = "undirected"))
+}
+
+# Returns a data frame showing the undirected closeness of each company, ignoring edge values
+getClosenessCentrality <- function(companyNetwork) {
+    cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), closeness(companyNetwork, gmode = "graph", diag = TRUE, cmode = "undirected"))
+}
+
+getCentralization <- function(companyNetwork, centralityFunction) {
+    centralization(companyNetwork, centralityFunction, mode = "graph", diag = TRUE)
+}
+
+ranked <- function(centralityTable) {
+    centralityTable[order(-centralityTable[,2]),]
+}
