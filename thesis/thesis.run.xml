@@ -44,14 +44,26 @@
   <internal package="biblatex" priority="9" active="0">
     <generic>latex</generic>
     <provides type="dynamic">
-      <file>thesis.bcf</file>
+      <file>thesis.aux</file>
+      <file>thesis1-blx.aux</file>
+      <file>thesis2-blx.aux</file>
+      <file>thesis3-blx.aux</file>
+      <file>thesis4-blx.aux</file>
+      <file>thesis5-blx.aux</file>
+      <file>thesis-blx.bib</file>
     </provides>
     <requires type="dynamic">
       <file>thesis.bbl</file>
+      <file>thesis1-blx.bbl</file>
+      <file>thesis2-blx.bbl</file>
+      <file>thesis3-blx.bbl</file>
+      <file>thesis4-blx.bbl</file>
+      <file>thesis5-blx.bbl</file>
     </requires>
     <requires type="static">
       <file>blx-dm.def</file>
       <file>blx-compat.def</file>
+      <file>blx-bibtex.def</file>
       <file>biblatex.def</file>
       <file>blx-natbib.def</file>
       <file>authoryear.bbx</file>
@@ -62,13 +74,14 @@
     </requires>
   </internal>
   <external package="biblatex" priority="5" active="0">
-    <generic>biber</generic>
+    <generic>bibtex</generic>
     <cmdline>
-      <binary>biber</binary>
+      <binary>bibtex</binary>
+      <option>-min-crossrefs 2</option>
       <infile>thesis</infile>
     </cmdline>
     <input>
-      <file>thesis.bcf</file>
+      <file>thesis.aux</file>
     </input>
     <output>
       <file>thesis.bbl</file>
@@ -77,10 +90,149 @@
       <file>thesis.bbl</file>
     </provides>
     <requires type="dynamic">
-      <file>thesis.bcf</file>
+      <file>thesis.aux</file>
+      <file>thesis-blx.bib</file>
     </requires>
     <requires type="editable">
-      <file>proposal.bib</file>
+      <file>example.bib</file>
+    </requires>
+    <requires type="static">
+      <file>biblatex.bst</file>
+    </requires>
+  </external>
+  <external package="biblatex" priority="5" active="0">
+    <generic>bibtex</generic>
+    <cmdline>
+      <binary>bibtex</binary>
+      <option>-min-crossrefs 2</option>
+      <infile>thesis1-blx</infile>
+    </cmdline>
+    <input>
+      <file>thesis1-blx.aux</file>
+    </input>
+    <output>
+      <file>thesis1-blx.bbl</file>
+    </output>
+    <provides type="dynamic">
+      <file>thesis1-blx.bbl</file>
+    </provides>
+    <requires type="dynamic">
+      <file>thesis1-blx.aux</file>
+      <file>thesis-blx.bib</file>
+    </requires>
+    <requires type="editable">
+      <file>example.bib</file>
+    </requires>
+    <requires type="static">
+      <file>biblatex.bst</file>
+    </requires>
+  </external>
+  <external package="biblatex" priority="5" active="0">
+    <generic>bibtex</generic>
+    <cmdline>
+      <binary>bibtex</binary>
+      <option>-min-crossrefs 2</option>
+      <infile>thesis2-blx</infile>
+    </cmdline>
+    <input>
+      <file>thesis2-blx.aux</file>
+    </input>
+    <output>
+      <file>thesis2-blx.bbl</file>
+    </output>
+    <provides type="dynamic">
+      <file>thesis2-blx.bbl</file>
+    </provides>
+    <requires type="dynamic">
+      <file>thesis2-blx.aux</file>
+      <file>thesis-blx.bib</file>
+    </requires>
+    <requires type="editable">
+      <file>example.bib</file>
+    </requires>
+    <requires type="static">
+      <file>biblatex.bst</file>
+    </requires>
+  </external>
+  <external package="biblatex" priority="5" active="0">
+    <generic>bibtex</generic>
+    <cmdline>
+      <binary>bibtex</binary>
+      <option>-min-crossrefs 2</option>
+      <infile>thesis3-blx</infile>
+    </cmdline>
+    <input>
+      <file>thesis3-blx.aux</file>
+    </input>
+    <output>
+      <file>thesis3-blx.bbl</file>
+    </output>
+    <provides type="dynamic">
+      <file>thesis3-blx.bbl</file>
+    </provides>
+    <requires type="dynamic">
+      <file>thesis3-blx.aux</file>
+      <file>thesis-blx.bib</file>
+    </requires>
+    <requires type="editable">
+      <file>example.bib</file>
+    </requires>
+    <requires type="static">
+      <file>biblatex.bst</file>
+    </requires>
+  </external>
+  <external package="biblatex" priority="5" active="0">
+    <generic>bibtex</generic>
+    <cmdline>
+      <binary>bibtex</binary>
+      <option>-min-crossrefs 2</option>
+      <infile>thesis4-blx</infile>
+    </cmdline>
+    <input>
+      <file>thesis4-blx.aux</file>
+    </input>
+    <output>
+      <file>thesis4-blx.bbl</file>
+    </output>
+    <provides type="dynamic">
+      <file>thesis4-blx.bbl</file>
+    </provides>
+    <requires type="dynamic">
+      <file>thesis4-blx.aux</file>
+      <file>thesis-blx.bib</file>
+    </requires>
+    <requires type="editable">
+      <file>example.bib</file>
+    </requires>
+    <requires type="static">
+      <file>biblatex.bst</file>
+    </requires>
+  </external>
+  <external package="biblatex" priority="5" active="0">
+    <generic>bibtex</generic>
+    <cmdline>
+      <binary>bibtex</binary>
+      <option>-min-crossrefs 2</option>
+      <infile>thesis5-blx</infile>
+    </cmdline>
+    <input>
+      <file>thesis5-blx.aux</file>
+    </input>
+    <output>
+      <file>thesis5-blx.bbl</file>
+    </output>
+    <provides type="dynamic">
+      <file>thesis5-blx.bbl</file>
+    </provides>
+    <requires type="dynamic">
+      <file>thesis5-blx.aux</file>
+      <file>thesis-blx.bib</file>
+    </requires>
+    <requires type="editable">
+      <file>example.bib</file>
+    </requires>
+    <requires type="static">
+      <file>biblatex.bst</file>
     </requires>
   </external>
 </requests>
