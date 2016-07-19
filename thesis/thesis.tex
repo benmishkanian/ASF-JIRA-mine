@@ -58,16 +58,16 @@
 % \usepackage{hyperref}
 
 % nice looking, parenthetical references
-\usepackage[sorting=nyt,natbib=true,citestyle=authoryear,bibstyle=authoryear,maxnames=3,refsection
-=chapter]{biblatex}
+%\usepackage[sorting=nyt,natbib=true,citestyle=authoryear,bibstyle=authoryear,maxnames=3,refsection
+%=chapter,backend=bibtex]{biblatex}
 %\usepackage{chapterbib} % incompatible with biblatex
-\bibliography{proposal}
-\defbibheading{bibliography}{%
-	\section{References}
-	}
+%\bibliography{example}
+%\defbibheading{bibliography}{%
+%	\section{References}
+%	}
 	
 % bibliography can be single-spaced for UC thesis format
-\appto{\bibsetup}{\ssp}
+%\appto{\bibsetup}{\ssp}
 	
 
 %make the index
@@ -137,7 +137,7 @@
 \usepackage{varwidth}
 \usepackage{color}
 \usepackage{rotating}
-\AtEveryBibitem{\clearfield{month}} %Cleaner references without month being printed
+%\AtEveryBibitem{\clearfield{month}} %Cleaner references without month being printed
 
 \usepackage[letterpaper, margin=1in]{geometry}
 \setlength{\voffset}{0in}
@@ -197,6 +197,8 @@
 % reset the page style
 %\pagestyle{plain}
 
+\bibliographystyle{plain}
+\bibliography{example}
 
 % To enable this it will need to be added to toc so it's not in a chapter
 %\printbibliography[heading=bibliography]
