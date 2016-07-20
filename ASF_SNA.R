@@ -52,6 +52,15 @@ getClosenessCentrality <- function(companyNetwork) {
     cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), closeness(companyNetwork, gmode = "graph", diag = TRUE, cmode = "undirected"))
 }
 
+getCentralities <- function(companyNetwork){
+    getCentrality <- function(centralityFun) {
+        ranking <- ranked(centralityFun(companyNetwork))
+        colnames(ranking) <- c("organization", "score")
+        ranking
+    }
+    lapply(c(getDegreeCentrality, getBetweennessCentrality, getClosenessCentrality), getCentrality)
+}
+
 getCentralization <- function(companyNetwork, centralityFunction) {
     centralization(companyNetwork, centralityFunction, mode = "graph", diag = TRUE)
 }
