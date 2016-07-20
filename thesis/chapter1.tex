@@ -1,4 +1,5 @@
 \chapter{Introduction}
+\section{Background}
 In recent years, there have been a variety of research papers analyzing the different facets of open source software (OSS). OSS research is of interest because if OSS has the potential to challenge the economics and methods of commercial development, as some have claimed, it is important to understand and evaluate it\cite{mockus2002two}. The success of several prominent open source projects have shown that the OSS development model can be highly productive. For example, Godfrey and Tu \cite{godfrey2000evolution} found that the Linux kernel project experienced superlinear growth over its six-year lifespan, in spite of prior research asserting that growth of software systems in general tends to slow down as they become larger. Further studies have been performed to identify specific benefits associated with open source projects. Paulson, Succi, and Eberlein \cite{paulson2004empirical}, for instance, found empirical support for the hypothesis that "open source projects generally have fewer defects than closed source projects, as defects are found and fixed rapidly." The openness and decentralization of OSS projects can allow these projects to attain more developer attention than otherwise possible.
 
 Although OSS projects are freely accessible to the developer community, it does not mean they are mutually exclusive with the interests of commercial organizations. In fact, a growing body of research has shown that the opposite is true. In a survey of developers of Java projects hosted on SourceForge, Capra, Francalanci, Merlo, and Lamastra discovered that 31\% of the projects had a firm that was contributing in some way, with an average of two firms contributing per project\cite{capra2009survey}. In some projects, elements of commercial and open source software development productively coexist; in a case study of Mozilla, an OSS project which incorporates some elements of traditional commercial software development processes, Mockus, Fielding, and Herbsleb \cite{mockus2002two} found that Mozilla had low defect density, comparable to that of the Apache project, which does not have such commercial influences.
@@ -8,12 +9,25 @@ Since it has become clear that commercial organizations are frequently participa
 	\item Is commercial development of OSS highly centralized, in the sense that a few organizations are highly involved in OSS, while most others are on the periphery?
 	\item Which organizations are most central to OSS development?
 \end{itemize}
-In order to answer these questions, data was collected from Apache Software Foundation (ASF) projects to develop measures for contribution levels of individual organizations, which was then used to build a social network for these organizations. Chapter 2 describes the data collection process, and Chapter 3 illustrates the social network analysis. Chapter 4 outlines the results of the study, and Chapter 5 concludes.
+In order to answer these questions, data was collected from Apache Software Foundation (ASF) projects to develop measures for contribution levels of individual organizations, which was then used to build a social network for these organizations.
 
-\section{Research Topic and Experiment}
-% TODO: stub
-The time period \timeperiod{} under observation began at January 1, 2016 and ended at June 1, 2016. This period was chosen for two reasons:
+\section{Research Scope and Experiment Overview}
+% Moved from Ch 2 Sec 1
+When researching open source software, there are a multitude of possible software repositories and organizations to base the experiment on. For example, Capra et al. studied SourceForge projects, while Neary et al. studied GNOME. \pd{Reword this bit to first include some motivation, viz: For our work, we needed to reliably link user identities across different user functions. We needed this because...} \bm{Fixed, please review.}
+For this experiment, it was essential that the employer names of most contributors could be reliably obtained, so consequently it was important to mine data from an environment that was rich in contributor metadata which could be used to ascertain the employer names. As a result, we chose to study Apache Software Foundation projects because they have a consistent organizational structure with respect to how developers collaborate on Git, Github, and JIRA, which made it simpler to reliably link user identities across these services, thus providing contributor metadata from up to 3 different locations. This, in turn, facilitated the determination of employer names.
+
+Another variable that must be considered when researching OSS is that contribution patterns will change over time as the projects and contributors themselves change. This aspect made it infeasible to analyze projects over their full lifetimes, because larger time windows of observation resulted in reduced accuracy in attributing contributions to organizations. This is due to the fact that contributor profile data may be out-of-date or misleading at some points in time, and such noise will accumulate as the period under consideration grows. Since accurate employer attribution was critical for the data collection to be successful, a smaller time window was necessary. For this experiment, the time period \timeperiod{} under observation began at January 1, 2016 and ended at June 1, 2016. This particular period was chosen for two reasons:
 \begin{itemize}
-	\item A six-month period reduced the possibility of contributors having changed employers during the period, which would have introduced problems in cleanly associating their contributions with individual organizations.
+	\item A six-month period is short enough to minimize the possibility of contributors having had changed employers during the period, and long enough to provide an accurate picture of the contribution levels of individuals.
 	\item Since the LinkedIn employer data was collected in June 2016, having the period end at that time preserved the timeliness (and thus relevance) of that data.
 \end{itemize}
+
+The experiment proceeded as follows:
+\begin{enumerate}
+	\item A subset of ASF projects was chosen for analysis.
+	\item Contributor data was collected by mining Git, Github, and JIRA for these projects.
+	\item The contributor data was used to identify the employer of each contributor.
+	\item A social network of employers was generated based on the extent of the collaboration between the employees.
+	\item The social networks were analyzed to answer the previously stated research questions.
+\end{enumerate}
+Chapter 2 describes the data collection process, and Chapter 3 illustrates the social network analysis. Chapter 4 outlines the results of the study, and Chapter 5 concludes.

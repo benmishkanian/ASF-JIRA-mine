@@ -18,9 +18,7 @@ Since creating this classifier proved infeasible, the data was re-purposed to do
 \end{itemize}
 
 \section{Data Sources}
-When researching open source software, there are a multitude of possible software repositories and organizations to base the experiment on. For example, some prior work studied SourceForge projects, while others studied GNOME. \pd{Reword this bit to first include some motivation, viz: For our work, we needed to reliably link user identities across different
-user functions. We needed this because...}
-We chose to study Apache Software Foundation projects because they have a consistent organization structure with respect to how developers collaborate on Git, Github, and JIRA. This structure made it simpler to write a script that can reliably link user identities across these service.
+
 To find the employer of a given Git committer, the script attempts to collect data from the Git account, and any associated JIRA and/or Github accounts. It also utilizes the Google Custom Search API to find links to LinkedIn profiles, which can then be inspected manually. Each set of values is stored in a separate entry in a PostgreSQL database, to maximize the amount of information available for finding a contributor's employer.
 The following information is mined from Git, Github, and JIRA accounts:
 \begin{itemize}
