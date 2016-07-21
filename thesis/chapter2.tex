@@ -43,8 +43,13 @@ Furthermore, to work around the rate limit of the Github API, the script utilize
 \section{Database Schema}
 Due to technical limitations in some of the external dependencies used to obtain project and contributor data, multiple different databases were required. The following subsections describe the purpose and schema of these databases.
 \subsection{GHTorrent Database}
-A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a cache for the live Github data, which sped up the data collection process because it provided a way to avoid encountering the Github API rate limit as frequently.
-% TODO: insert schema diagram
+A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a cache for the live Github data, which sped up the data collection process because it provided a way to avoid encountering the Github API rate limit as frequently. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}
+\begin{figure}
+	\includegraphics[width=\textwidth]{GHTorrentSchema.png}
+	\centering
+	\caption{The relevant tables of the GHTorrent database}
+	\label{fig:ghtorrentSchema}
+\end{figure}
 \subsection{CVSAnalY Databases}
 The cvsanaly2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
 \begin{figure}
