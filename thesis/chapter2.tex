@@ -59,6 +59,16 @@ These constraints resulted in the exclusion of projects which lacked sufficient 
 	\caption{Number of committers accounted for in each project}
 \end{table}
 
+\section{Database Schema}
+Due to technical limitations in some of the external tools used to obtain project and contributor data, three different databases were required. The following subsections describe the purpose and schema of these databases.
+\subsection{GHTorrent Database}
+A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a cache for the live Github data, which sped up the data collection process because it provided a way to avoid encountering the Github API rate limit as frequently.
+% TODO: insert schema diagram
+\subsection{CVSAnalY Database}
+The cvsanaly2 tool\cite{cvsanaly} was used to parse Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases.
+\subsection{Main Database}
+The main research database contains all the data mined from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on cvsanaly2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}.
+
 \section{Data Collection Algorithm}
 The script jiradb.py performs the majority of the data gathering. Its algorithm can be summarized as follows:
 \begin{enumerate}
@@ -68,8 +78,6 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 	\item Associate accounts belonging to a single person under a single contributor ID \pd{Explain how this done} 
 	\item Generate a guess for the employer of each contributor \pd{Explain how this is done} 
 \end{enumerate}
-
-
 
 Each individual set of profile data is stored in a row of the \textbf{accountprojects} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
