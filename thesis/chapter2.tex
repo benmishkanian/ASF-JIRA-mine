@@ -40,6 +40,18 @@ Furthermore, to work around the rate limit of the Github API, the script utilize
 
 \pd{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects}
 
+\section{Database Schema}
+Due to technical limitations in some of the external dependencies used to obtain project and contributor data, three different databases were required. The following subsections describe the purpose and schema of these databases.
+\subsection{GHTorrent Database}
+A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a cache for the live Github data, which sped up the data collection process because it provided a way to avoid encountering the Github API rate limit as frequently.
+% TODO: insert schema diagram
+\subsection{CVSAnalY Database}
+The cvsanaly2 tool\cite{cvsanaly} was used to parse Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases.
+\subsection{Main Database}
+The main research database contains all the data collected from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on cvsanaly2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}.
+
+The most important tables are \textbf{contributors} and \textbf{contributoraccounts}. \textbf{contributoraccounts} stores the data for each Git, Github, and JIRA account. Each row has a foreign key to \textbf{contributors}, which allows the association of multiple accounts to a single person. The table \textbf{emailprojectcommitcount} maps an email address in the git log to the number of commits that account authored for each project. With these three tables, we derive \textbf{contributorprojectcommitcount}. The table \textbf{contributorcompanies} maps a contributor to their employer. The generation of this table is discussed in subsequent sections. Joining \textbf{contributorcompanies} and \textbf{contributorprojectcommitcount} creates \textbf{companyprojectcommitcount}, which is then used as the basis of generating the company social networks.
+
 \section{Data Collection Constraints}
 Since a contributor's employer name can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for whom no employer name could be found. A further constraint is that if this information cannot be mined automatically for most people, it becomes infeasible to fill missing values in the dataset through manual inspection. After performing some case studies, it was found that this can be a significant problem for larger projects such as Apache Kafka, which have many individual committers. However, the vast majority of commits to a project typically came from a small group of the committers, whose employers could more easily be found. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project for the time period under observation. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
 An additional constraint was that only ASF projects which met the following conditions were considered:
@@ -58,16 +70,6 @@ These constraints resulted in the exclusion of projects which lacked sufficient 
 	\end{tabular}
 	\caption{Number of committers accounted for in each project}
 \end{table}
-
-\section{Database Schema}
-Due to technical limitations in some of the external tools used to obtain project and contributor data, three different databases were required. The following subsections describe the purpose and schema of these databases.
-\subsection{GHTorrent Database}
-A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a cache for the live Github data, which sped up the data collection process because it provided a way to avoid encountering the Github API rate limit as frequently.
-% TODO: insert schema diagram
-\subsection{CVSAnalY Database}
-The cvsanaly2 tool\cite{cvsanaly} was used to parse Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases.
-\subsection{Main Database}
-The main research database contains all the data mined from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on cvsanaly2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}.
 
 \section{Data Collection Algorithm}
 The script jiradb.py performs the majority of the data gathering. Its algorithm can be summarized as follows:
