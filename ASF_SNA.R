@@ -1,5 +1,6 @@
 library(network)
 library(sna)
+library(igraph)
 
 # dbConnection should be bound to a PostgreSQL connection
 doQuery <- function(query) {
@@ -67,4 +68,24 @@ getCentralization <- function(companyNetwork, centralityFunction) {
 
 ranked <- function(centralityTable) {
     centralityTable[order(-centralityTable[,2]),]
+}
+
+performGirvanNewman <- function(edgelist) {
+    # generate igraph
+	ig <- graph_from_edgelist(edgelist, directed = FALSE)
+	# assign vertex weights based on number of contributors
+	getContributorCount <- function(organization) {
+	    # assumes that contributorcompanies contains exactly the set of contributors whose contributions are reflected in ig
+        doQuery(paste("select count(*) from contributorcompanies where company='", organization, "';")
+	}
+	setVertexWeight <- function(vertex, ig) {
+	    set.vertex.attribute(ig, "weight", vertex, getContributorCount(get.vertex.attribute(ig, "name", vertex)))
+	}
+	vertices <- V(ig)
+	for (vertex in vertices) {
+	    ig <- setVertexWeight(vertex, ig)
+	}
+	ig <- set.vertex.attribute(ig, "weight")
+    orgCommunities <- edge.betweenness.community(ig, directed = FALSE)
+	plot(orgCommunities, ig)
 }
