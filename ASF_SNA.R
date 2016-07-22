@@ -72,6 +72,7 @@ ranked <- function(centralityTable) {
 
 performGirvanNewman <- function(edgelist) {
     # generate igraph
+	edgelist <- as.matrix(edgelist[,-3])
 	ig <- graph_from_edgelist(edgelist, directed = FALSE)
 	# assign vertex weights based on number of contributors
 	getContributorCount <- function(organization) {
