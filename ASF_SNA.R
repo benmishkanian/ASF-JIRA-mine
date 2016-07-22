@@ -77,7 +77,7 @@ performGirvanNewman <- function(edgelist) {
 	# assign vertex weights based on number of contributors
 	getContributorCount <- function(organization) {
 	    # assumes that contributorcompanies contains exactly the set of contributors whose contributions are reflected in ig
-        doQuery(paste("select count(*) from contributorcompanies where company='", organization, "';")
+        doQuery(paste("select count(*) from contributorcompanies where company='", organization, "';", sep = ""))
 	}
 	setVertexWeight <- function(vertex, ig) {
 	    set.vertex.attribute(ig, "weight", vertex, getContributorCount(get.vertex.attribute(ig, "name", vertex)))
@@ -86,7 +86,5 @@ performGirvanNewman <- function(edgelist) {
 	for (vertex in vertices) {
 	    ig <- setVertexWeight(vertex, ig)
 	}
-	ig <- set.vertex.attribute(ig, "weight")
     orgCommunities <- edge.betweenness.community(ig, directed = FALSE)
-	plot(orgCommunities, ig)
 }
