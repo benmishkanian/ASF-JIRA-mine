@@ -99,7 +99,7 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 	\item Generate a guess for the employer of each contributor \pd{Explain how this is done} \bm{I explain it in 2.5.5}
 \end{enumerate}
 
-Each individual set of profile data is stored in a row of the \textbf{accountprojects} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
+Each individual set of profile data is stored in a row of the \textbf{contributoraccounts} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
 \subsection{JIRA Data}
 \pd{Use consistent typography for "JIRA"} \bm{In this context, jira is the package name, so it has the proper case. Is there a special way to typeset Python package names to make it more clear?}
@@ -108,13 +108,13 @@ The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can 
 project = "P" AND created < "2016-06-01 00:00" AND (created >
  "2016-01-01 00:00" OR resolved < "2016-06-01 00:00")
 \end{lstlisting}
-After the issues were downloaded, each issue's metadata and history was processed to find JIRA accounts that either created or resolved the issue in \timeperiod. The profile information for each account was stored as an entry in \textbf{accountprojects}.
+After the issues were downloaded, each issue's metadata and history was processed to find JIRA accounts that either created or resolved the issue in \timeperiod. The profile information for each account was stored as an entry in \textbf{contributoraccounts}.
 \subsection{Git Data}
-The cvsanaly tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, the git account information was inserted into \textbf{accountprojects}, with the username column set to the Github account's username. Finally, if the email address had not been seen before, a row was added to table \textbf{emailprojectcommitcount} relating the address to the number of commits authored from that address to the project during \timeperiod.
+The cvsanaly tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, the git account information was inserted into \textbf{contributoraccounts}, with the username column set to the Github account's username. Finally, if the email address had not been seen before, a row was added to table \textbf{emailprojectcommitcount} relating the address to the number of commits authored from that address to the project during \timeperiod.
 \subsection{Github Data}
 Whenever a new Git or JIRA account was processed, the account information was used to query the GHTorrent database to find the associated Github account. Matching against Git account information was typically more reliable than using JIRA, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address instead, so the accounts could be associated through that.
 
-Technically, Github allows an email address to be associated with only one Github account, but due to inaccuracies in the GHTorrent dataset, this constraint cannot be relied upon. To mitigate this problem, a row in \textbf{accountprojects} is created for each possible Github username linked with a given email address in GHTorrent, but the only direct usage of these usernames was for identity merging purposes. In cases where actual Github profile information was needed, the usernames were validated using the Github API before use, and the first valid one was taken as the contributor's official Github username.
+Technically, Github allows an email address to be associated with only one Github account, but due to inaccuracies in the GHTorrent dataset, this constraint cannot be relied upon. To mitigate this problem, a row in \textbf{contributoraccounts} is created for each possible Github username linked with a given email address in GHTorrent, but the only direct usage of these usernames was for identity merging purposes. In cases where actual Github profile information was needed, the usernames were validated using the Github API before use, and the first valid one was taken as the contributor's official Github username.
 \subsection{Identity Merging}
 Two accounts were considered to belong to the same person when at least one of the following was true:
 \begin{itemize}
@@ -136,3 +136,14 @@ Employer guesses were generated from the following sources:
 	\item LinkedIn
 \end{itemize}
 LinkedIn page URLs were found by using Google Custom Search API to query linkedin.com using the concatenation of each account's display name and the name of the project that account contributed to. These pages were then inspected manually to find the current employer. 
+
+Once these guesses were generated, a determination of each contributor's employer was made based on the following prioritization:
+\begin{enumerate}
+	\item If the employer name came from LinkedIn, it takes precedence over all other possibilities, because LinkedIn is usually the most up-to-date of the profile, and the current employer is an essential part of this profile.
+	\item Otherwise, if the contributor's Github profile listed an employer, it was taken.
+	\item If neither LinkedIn nor Github provided an employer guess, it was left for manual inspection.
+\end{enumerate}
+Additionally, any employer name that appeared only once in the dataset was included in manual verification, based on the idea that it was more likely to be incorrectly determined, as opposed to the alternative possibility, which is that the organization assigned only one person to the projects.
+The manual verification uncovered the true employers of all but six of the contributors whose employer name was missing or dubious. Instead of excluding these contributors from further analysis, their employer names were set to \verb|Unknown <Unique_ID>|, effectively classifying them as independent volunteers. Of the 92 contributors with dubious employer name, 42 were found to be incorrect, and subsequently corrected.
+
+In the final step of data cleaning, different spellings and capitalizations of employer names were normalized by manually constructing a mapping table from each variant spelling to the most popular spelling (in terms of how many of the mined contributors used it in their profiles.) The total number of unique employers in the dataset, including the six unknown ones, was 93.
