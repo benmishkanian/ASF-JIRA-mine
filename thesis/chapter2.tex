@@ -38,20 +38,22 @@ The following additional information is mined from Github accounts:
 \end{itemize}
 Furthermore, to work around the rate limit of the Github API, the script utilized a GHTorrent.org database dump as an offline cache of Github data.
 
-\pd{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects} \bm{Created section ``Database Schema'', please review.}
+\pddone{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects} \bmdone{Created section ``Database Schema'', please review.}
 
 \section{Database Schema}
 All the collected data was stored in a set of relational databases. Due to technical limitations in some of the project's external dependencies, multiple different databases were required. The following subsections describe the purpose and schema of each database.
 \subsection{GHTorrent Database}
-A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a cache for the live Github data, which sped up the data collection process because it provided a way to avoid encountering the Github API rate limit as frequently. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}
+A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a "proxy cache" for the live Github data, which helped us  
+%up the data collection process because it provided a way to 
+avoid encountering the Github API rate limit as frequently. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}.
 \begin{figure}
 	\includegraphics[width=\textwidth]{GHTorrentSchema.png}
 	\centering
-	\caption{The relevant tables of the GHTorrent database}
+	\caption{The relevant tables of the GHTorrent database \pd{Show foreign keys with asterix, and indicate this in this caption}}
 	\label{fig:ghtorrentSchema}
 \end{figure}
 \subsection{CVSAnalY Databases}
-The cvsanaly2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
+\pd{Is it really cvsanaly2? If so use the same name in the same font everywhere} The cvsanaly2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
 \begin{figure}
 	\includegraphics[scale=0.8]{cvsanalySchema.png}
 	\centering
@@ -95,14 +97,15 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 	\item Get JIRA account data for contributors to the JIRAs of the projects
 	\item Get Git account and commit data for committers to the projects
 	\item Get Github account data for Git accounts 
-	\item Associate accounts belonging to a single person under a single contributor ID \pd{Explain how this done} \bm{I explain it in 2.5.4}
-	\item Generate a guess for the employer of each contributor \pd{Explain how this is done} \bm{I explain it in 2.5.5}
+	\item Associate accounts belonging to a single person under a single contributor ID \pd{Put forward references to 2.5.4, using ref command} \bmdone{I explain it in 2.5.4}
+	\item Generate a guess for the employer of each contributor \pd{Forward references here} \bmdone{I explain it in 2.5.5}
 \end{enumerate}
 
 Each individual set of profile data is stored in a row of the \textbf{contributoraccounts} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
 \subsection{JIRA Data}
 \pd{Use consistent typography for "JIRA"} \bm{In this context, jira is the package name, so it has the proper case. Is there a special way to typeset Python package names to make it more clear?}
+\pd{Jira is being used as a noun modifier, here so it's OK to use the same font here as everywhere}
 The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod:
 \begin{lstlisting}
 project = "P" AND created < "2016-06-01 00:00" AND (created >
