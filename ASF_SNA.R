@@ -1,6 +1,5 @@
 library(network)
 library(sna)
-library(igraph)
 
 # dbConnection should be bound to a PostgreSQL connection
 doQuery <- function(query) {
@@ -43,18 +42,20 @@ getCompanyNetwork <- function() {
 
 # Returns a data frame showing the total (Freeman) degree of each company
 getDegreeCentrality <- function(companyNetwork) {
-    cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), degree(companyNetwork, gmode="graph", diag = TRUE))
+    cbind.data.frame(get.vertex.attribute(companyNetwork, "vertex.names"), degree(companyNetwork, gmode="graph", diag = TRUE))
 }
 
 # Returns a data frame showing the standard undirected betweenness of each company, ignoring edge values
 getBetweennessCentrality <- function(companyNetwork) {
-    cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), betweenness(companyNetwork, gmode="graph", diag = TRUE, cmode = "undirected"))
+    cbind.data.frame(get.vertex.attribute(companyNetwork, "vertex.names"), betweenness(companyNetwork, gmode="graph", diag = TRUE, cmode = "undirected"))
 }
 
 # Returns a data frame showing the undirected closeness of each company, ignoring edge values
 getClosenessCentrality <- function(companyNetwork) {
-    cbind.data.frame(get.vertex.attribute(cn, "vertex.names"), closeness(companyNetwork, gmode = "graph", diag = TRUE, cmode = "undirected"))
+    cbind.data.frame(get.vertex.attribute(companyNetwork, "vertex.names"), closeness(companyNetwork, gmode = "graph", diag = TRUE, cmode = "undirected"))
 }
+
+# TODO: Why does setting ignore.eval=TRUE not affect the results?
 
 getCentralities <- function(companyNetwork){
     getCentrality <- function(centralityFun) {
@@ -72,6 +73,8 @@ getCentralization <- function(companyNetwork, centralityFunction) {
 ranked <- function(centralityTable) {
     centralityTable[order(-centralityTable[,2]),]
 }
+
+## Functions below this line require library(igraph) ##
 
 makeiGraph <- function(edgelist) {
     edgelist <- as.matrix(edgelist[,-3])
