@@ -25,6 +25,57 @@ In looking at the graph, it is immediately apparent that there are identifiable 
 	\label{fig:orgCommunities}
 \end{figure}
 
-\section{Centrality Measures}
+\section{Centrality and Centralization Measures}
+Measuring the centrality of nodes in a network can be an effective way to learn about the network structure. As a review, the following discussion includes definitions of centrality and centralization, taken from \textit{Introduction to social network methods}\cite{hanneman}.
 
+The centrality of a vertex is a measure of how close it is to the ``center'' of action in a network. There are multiple different ways to measure centrality, but the most common are degree centrality, closeness centrality, and betweenness centrality. Each of these was computed for all vertices in the organizational networks. The next three subsections provide more detail on these measures, followed by a discussion on the centralization of the network as a whole.
+
+\subsection{Degree Centrality}
+Degree centrality is simply measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. A table of the organizations with the highest degree centrality is shown in table \ref{tab:degree}.
+
+\begin{table}
+	\begin{tabular}{l|c}%
+		\bfseries Organization & \bfseries Degree% specify table head
+		\csvreader[head to column names]{degree.csv}{}% use head of csv as column names
+		{\\\hline\organizationa & \scorea}% specify your coloumns here
+	\end{tabular}
+	\centering
+	\caption{The 10 organizations with the highest degree centrality}\label{tab:degree}
+\end{table}
+\subsection{Closeness Centrality}
+Closeness centrality is a measure of how ``close'' a vertex is to all others in the network. For the present study, the closeness of two vertices was computed using the following formula:
+\begin{equation*}
+	C(v) = (|V(G)|-1)/sum( d(v,i), i in V(G), i!=v )
+\end{equation*}
+where where d(i,j) is the geodesic distance between i and j (where defined)\cite{butts}.
+
+A table of the organizations with the highest closeness centrality is shown in table \ref{tab:closeness}. Unlike degree centrality, closeness centrality takes into account the distances to vertices that are more than one edge away. This means that vertices raking high in closeness centrality are central to the network as a whole, rather than simply central to their neighborhoods. For example, SK Telecom has low closeness, but high degree. Looking back at the visualization in figure \ref{fig:orgCommunities}, we can see this is because it is directly in the center of the large central cluster, which provides it many direct edges, but insulates it from all other clusters. In the other extreme, Fitbit has high closeness but relatively low degree, because although it has short paths to most clusters, it achieved this through a small number of links to other linchpin organizations. Still, eight out of the ten organizations are included in both lists, so already a pattern begins to emerge about which organizations are most central overall.
+
+\begin{table}
+	\begin{tabular}{l|c}%
+		\bfseries Organization & \bfseries Closeness% specify table head
+		\csvreader[head to column names]{closeness.csv}{}% use head of csv as column names
+		{\\\hline\organizationb & \scoreb}% specify your coloumns here
+	\end{tabular}
+	\centering
+	\caption{The 10 organizations with the highest closeness centrality}\label{tab:closeness}
+\end{table}
+
+\subsection{Betweenness Centrality}
+Betweenness centrality is a measure of how frequently a vertex appears in the list of shortest paths between all other vertices. Stated differently, it measures how likely it is that vertex V must be traversed when taking the shortest path between arbitrary vertices A and B. Betweenness places more emphasis on the importance of edges than closeness does; an edge that is on many shortest paths is likely to confer high between centrality scores on its incident vertices.
+
+A table of the organizations with the highest betweenness centrality is shown in table \ref{tab:betweenness}. One change that immediately stands out is that Red Hat is ranked second, whereas in the other two rankings it was not even in the top ten. This can be explained by taking another look at figure \ref{fig:orgCommunities}. At first glance, Red Hat seems to have similar positioning to Fibit, in that it has a medium number of edges to some other important actors. However, the difference is that Fitbit's direct connections are all in the 3 clusters nearest to it, whereas Red Hat has far-reaching connections to several clusters on the other side of the graph. This means that the shortest paths between nodes at the periphery of the graph are much more likely to require use of Red Hat's edges, because it is an efficient bridge between clusters, compared to Fitbit's edges.
+
+% This does not escape special characters--be careful with ``Ampool, Inc.''
+\begin{table}
+	\begin{tabular}{l|c}%
+		\bfseries Organization & \bfseries Betweenness% specify table head
+		\csvreader[head to column names]{betweenness.csv}{}% use head of csv as column names
+		{\\\hline\organizationc & \scorec}% specify your coloumns here
+	\end{tabular}
+	\centering
+	\caption{The 10 organizations with the highest betweenness centrality}\label{tab:betweenness}
+\end{table}
+
+\subsection{Centralization}
 \section{Cluster Analysis}\label{clustersection}
