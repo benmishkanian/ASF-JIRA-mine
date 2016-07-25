@@ -78,4 +78,25 @@ A table of the organizations with the highest betweenness centrality is shown in
 \end{table}
 
 \subsection{Centralization}
+Centralization measures the amount of variability in the centrality of the vertices of a network. It is a statistic of the network, rather than the individual nodes. A network with high centralization is one in which there is an unequal distribution of centrality in different parts of the network.  Centrality was computed for the organizational network using the following formula, developed by Freeman\cite{freeman1978centrality}:
+\begin{equation*}
+C^*(G) = sum( |max(C(v))-C(i)|, i in V(G) )
+\end{equation*}
+This formula requires some function C to measure centrality of vertices, and since there were three available methods to measure centrality, there are three different computed values for the network centralization. Table \ref{tab:centralization} displays the centralization value for each centrality measure. These values can be interpreted as percentages of centralization, with 1.00 indicating a completely centralized graph where only one vertex is central.
+
+The difference between the centralization values computed when using closeness versus betweenness for measuring centrality is striking. This discrepancy was likely caused by the fact that most of the vertices had a betweenness value of zero, making most of the summands in the centralization formula zero as well. Indeed, from the perspective of betweenness centrality, the network truly does appear somewhat decentralized, because the majority of the nodes are not on any shortest paths, and thus they are equally low in betweenness centrality. However, the nodes that are high in betweenness centrality have extremely high scores it it, keeping the network centralization above 25\%. Due to the skewedness of the betweenness centrality distribution, this is likely somewhat of an underestimate. After all, a visual inspection of the graph makes it readily apparent that the central cluster would result in near complete centralization, if nodes such as Red Hat and Fitbit did not provide alternative bridges between clusters. From the three measures, we can compute an average centralization value of 43\%, and we can conclude that the centralization level of the organizational network is somewhere between 25\% and 50\%, which is moderately centralized.
+
+\begin{table}
+	\begin{tabular}{l|c}
+		\bfseries Centrality Type & \bfseries Centralization \\
+		\hline
+		Degree & 0.4905946 \\
+		\hline
+		Closeness & 0.5550736 \\
+		\hline
+		Betweenness & 0.2619162
+	\end{tabular}
+	\centering
+	\caption{The network centralization value for each centrality measure}\label{tab:centralization}
+\end{table}
 \section{Cluster Analysis}\label{clustersection}
