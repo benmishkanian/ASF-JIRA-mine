@@ -38,6 +38,7 @@
 
 % more flexible definition of table environments
 \usepackage{ctable}
+\usepackage{longtable}
 
 %need this for \includegraphics{}
 \usepackage{graphicx}
@@ -153,6 +154,7 @@
 
 \usepackage{csvsimple}
 \usepackage[turnon]{notes}
+\usepackage[titletoc]{appendix}
 %%% Document Portion:
 \begin{document}
 
@@ -215,8 +217,8 @@
 
 % reset page style to fancy
 %\pagestyle{fancyplain}
-
+\begin{appendices}
  \input{appendix}
-
+\end{appendices}
 
 \end{document}

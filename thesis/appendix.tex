@@ -1,0 +1,39 @@
+\chapter{Centrality Scores}
+\DTLloaddb{degtab}{fulldegree.csv}
+\begin{longtable}{l|c}
+	\caption{Degree centrality of organizations}\label{tab:fulldegree}\\
+	\bfseries Organization & \bfseries Degree
+	
+ \DTLforeach{degtab}{%
+	  	\organization=organization,%
+	  	\score=score%
+ }{%
+ \\\hline\organization & \score
+	}
+\end{longtable}
+
+\DTLloaddb{bettab}{fullbetweenness.csv}
+\begin{longtable}{l|c}
+	\caption{Betweenness centrality of organizations}\label{tab:fullbetweenness}\\
+	\bfseries Organization & \bfseries Betweenness
+	
+	\DTLforeach{bettab}{%
+		\organization=organization,%
+		\score=score%
+	}{%
+	\\\hline\organization & \score
+}
+\end{longtable}
+
+\DTLloaddb{clotab}{fullcloseness.csv}
+\begin{longtable}{l|c}
+	\caption{Closeness centrality of organizations}\label{tab:fullcloseness}\\
+	\bfseries Organization & \bfseries Closeness
+	
+	\DTLforeach{clotab}{%
+		\organization=organization,%
+		\score=score%
+	}{%
+	\\\hline\organization & \score
+}
+\end{longtable}
