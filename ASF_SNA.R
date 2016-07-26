@@ -74,6 +74,10 @@ ranked <- function(centralityTable) {
     centralityTable[order(-centralityTable[,2]),]
 }
 
+unloadigraph <- function() {
+    detach("package:igraph", unload = TRUE)
+}
+
 ## Functions below this line require library(igraph) ##
 
 makeiGraph <- function(edgelist) {
