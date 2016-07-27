@@ -39,11 +39,16 @@
 \end{longtable}
 
 \chapter{Organization Data}\label{ch:orgdata}
-\begin{table}
-	\begin{longtable}{l|c}%
-		\bfseries Organization & \bfseries Contributor Count% specify table head
-		\csvreader[head to column names]{companypeoplecount.csv}{}% use head of csv as column names
-		{\\\hline\company & \personcount}% specify your coloumns here
-	\end{longtable}
-	\caption{Number of active contributors per organization during \timeperiod}\label{tab:orgcontributors}
-\end{table}
+
+\DTLloaddb{orgdatatab}{companypeoplecount.csv}
+\begin{longtable}{l|c}
+	\caption{Number of active contributors per organization during \timeperiod}\label{tab:orgcontributors}\\
+	\bfseries Organization & \bfseries Contributor Count
+	
+	\DTLforeach{orgdatatab}{%
+		\company=company,%
+		\personcount=personcount%
+	}{%
+	\\\hline\company & \personcount
+}
+\end{longtable}
