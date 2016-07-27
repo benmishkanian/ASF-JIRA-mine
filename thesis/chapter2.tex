@@ -41,7 +41,7 @@ Furthermore, to work around the rate limit of the Github API, the script utilize
 \pddone{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects} \bmdone{Created section ``Database Schema'', please review.}
 
 \section{Database Schema}
-All the collected data was stored in a set of relational databases. Due to technical limitations in some of the project's external dependencies, multiple different databases were required. The following subsections describe the purpose and schema of each database.
+All the collected data was stored in a set of relational databases. Due to technical limitations in some of the project's external dependencies, multiple different databases were required. The following subsections describe the purpose and schema of each database. In the schema diagrams, foreign keys are denoted with an asterisk.
 \subsection{GHTorrent Database}
 A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a "proxy cache" for the live Github data, which helped us  
 %up the data collection process because it provided a way to 
@@ -49,19 +49,19 @@ avoid encountering the Github API rate limit as frequently. The relevant portion
 \begin{figure}
 	\includegraphics[width=\textwidth]{GHTorrentSchema.png}
 	\centering
-	\caption{The relevant tables of the GHTorrent database \pd{Show foreign keys with asterix, and indicate this in this caption}}
+	\caption{The relevant tables of the GHTorrent database \pd{Show foreign keys with asterix, and indicate this in this caption}\bm{Added the asterisks. I opted to explain this syntax in the section introduction instead of the caption, so I would not have to repeat it 3 times.}}
 	\label{fig:ghtorrentSchema}
 \end{figure}
-\subsection{CVSAnalY Databases}
-\pd{Is it really cvsanaly2? If so use the same name in the same font everywhere} The cvsanaly2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, cvsanaly2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
+\subsection{CVSAnalY2 Databases}
+\pd{Is it really cvsanaly2? If so use the same name in the same font everywhere}\bm{Yes, the actual executable is cvsanaly2. I fixed it to consistently use the capitalized version seen on their website.} The CVSAnalY2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, CVSAnalY2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
 \begin{figure}
 	\includegraphics[scale=0.8]{cvsanalySchema.png}
 	\centering
-	\caption{The relevant tables of each cvsanaly2 database}
+	\caption{The relevant tables of each CVSAnalY2 database}
 	\label{fig:cvsanalySchema}
 \end{figure}
 \subsection{Main Database}
-The main research database contains all the data collected from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on cvsanaly2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}.
+The main research database contains all the data collected from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on CVSAnalY2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}.
 
 The most important tables are \textbf{contributors} and \textbf{contributoraccounts}. \textbf{contributoraccounts} stores the data for each Git, Github, and JIRA account. Each row has a foreign key to \textbf{contributors}, which allows the association of multiple accounts to a single person. The table \textbf{emailprojectcommitcount} maps an email address found in \textbf{accountprojects} to the number of commits that account authored for each project. With these three tables, we derive \textbf{contributorprojectcommitcount}. The table \textbf{contributorcompanies} maps a contributor to their employer. The generation of this table is discussed in subsequent sections. Joining \textbf{contributorcompanies} and \textbf{contributorprojectcommitcount} creates \textbf{companyprojectcommitcount}, which is then used as the basis of generating the organizational social networks. The schema for this database is shown in figure \ref{fig:mainSchema}.
 % TODO: decide if necessary to include accountprojects
@@ -96,44 +96,35 @@ These constraints resulted in the exclusion of projects which lacked sufficient 
 	\centering
 	\caption{The ASF projects mined, with the number of commits authored in \timeperiod}\label{tab:projectcommitcounts}
 \end{table}
-% TODO: do something about the overflowing table
-\begin{table}
-	\begin{tabular}{l|c}%
-		\bfseries Organization & \bfseries Committers% specify table head
-		\csvreader[head to column names]{companypeoplecount.csv}{}% use head of csv as column names
-		{\\\hline\company & \personcount}% specify your coloumns here
-	\end{tabular}
-	\caption{Number of committers accounted for in each project}
-\end{table}
 
 \section{Data Collection Algorithm}
 The script jiradb.py performs the majority of the data gathering. Its algorithm can be summarized as follows:
 \begin{enumerate}
-	\item Get JIRA account data for contributors to the JIRAs of the projects
-	\item Get Git account and commit data for committers to the projects
-	\item Get Github account data for Git accounts 
-	\item Associate accounts belonging to a single person under a single contributor ID \pd{Put forward references to 2.5.4, using ref command} \bmdone{I explain it in 2.5.4}
-	\item Generate a guess for the employer of each contributor \pd{Forward references here} \bmdone{I explain it in 2.5.5}
+	\item Get JIRA account data for contributors to the JIRAs of the projects (See section \ref{jirasec})
+	\item Get Git account and commit data for committers to the projects (See section \ref{gitsec})
+	\item Get Github account data for Git accounts (See section \ref{githubsec})
+	\item Associate accounts belonging to a single person under a single contributor ID (See section \ref{mergingsec}) \pd{Put forward references to 2.5.4, using ref command} \bmdone{I explain it in 2.5.4} \bm{Done.}
+	\item Generate a guess for the employer of each contributor (See section \ref{employersec}) \pd{Forward references here} \bmdone{I explain it in 2.5.5} \bm{Done.}
 \end{enumerate}
 
 Each individual set of profile data is stored in a row of the \textbf{contributoraccounts} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
 
-\subsection{JIRA Data}
-\pd{Use consistent typography for "JIRA"} \bm{In this context, jira is the package name, so it has the proper case. Is there a special way to typeset Python package names to make it more clear?}
-\pd{Jira is being used as a noun modifier, here so it's OK to use the same font here as everywhere}
-The jira Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod:
+\subsection{JIRA Data}\label{jirasec}
+\pddone{Use consistent typography for "JIRA"} \bmdone{In this context, jira is the package name, so it has the proper case. Is there a special way to typeset Python package names to make it more clear?}
+\pd{Jira is being used as a noun modifier, here so it's OK to use the same font here as everywhere} \bm{Fixed.}
+The JIRA Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod:
 \begin{lstlisting}
 project = "P" AND created < "2016-06-01 00:00" AND (created >
  "2016-01-01 00:00" OR resolved < "2016-06-01 00:00")
 \end{lstlisting}
 After the issues were downloaded, each issue's metadata and history was processed to find JIRA accounts that either created or resolved the issue in \timeperiod. The profile information for each account was stored as an entry in \textbf{contributoraccounts}.
-\subsection{Git Data}
-The cvsanaly tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, the git account information was inserted into \textbf{contributoraccounts}, with the username column set to the Github account's username. Finally, if the email address had not been seen before, a row was added to table \textbf{emailprojectcommitcount} relating the address to the number of commits authored from that address to the project during \timeperiod.
-\subsection{Github Data}
+\subsection{Git Data}\label{gitsec}
+The CVSAnalY2 tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, the git account information was inserted into \textbf{contributoraccounts}, with the username column set to the Github account's username. Finally, if the email address had not been seen before, a row was added to table \textbf{emailprojectcommitcount} relating the address to the number of commits authored from that address to the project during \timeperiod.
+\subsection{Github Data}\label{githubsec}
 Whenever a new Git or JIRA account was processed, the account information was used to query the GHTorrent database to find the associated Github account. Matching against Git account information was typically more reliable than using JIRA, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address instead, so the accounts could be associated through that.
 
 Technically, Github allows an email address to be associated with only one Github account, but due to inaccuracies in the GHTorrent dataset, this constraint cannot be relied upon. To mitigate this problem, a row in \textbf{contributoraccounts} is created for each possible Github username linked with a given email address in GHTorrent, but the only direct usage of these usernames was for identity merging purposes. In cases where actual Github profile information was needed, the usernames were validated using the Github API before use, and the first valid one was taken as the contributor's official Github username.
-\subsection{Identity Merging}
+\subsection{Identity Merging}\label{mergingsec}
 Two accounts were considered to belong to the same person when at least one of the following was true:
 \begin{itemize}
 	\item The accounts use the same email address
@@ -144,7 +135,7 @@ The only exception to these rules was that accounts which used the email address
 For each new contributor found (i.e. whenever a new account could not be associated with an existing account using the above rules), a row was added to the \textbf{contributors} table of the research database. Then, the new account information was used to query the GHTorrent database to find the associated Github account. Failing that, a similar query was performed against the live Github API. If the Github account was found, the login, company, and location values were stored in the newly created \textbf{contributors} row.
 
 Matching Github accounts using Git account information was typically more reliable than using JIRA account information, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address instead, so the accounts could be associated through that.
-\subsection{Employer Identification}
+\subsection{Employer Identification}\label{employersec}
 As described earlier, it was not always possible to pinpoint a contributor's employer with high confidence. However, it was usually possible to generate a number of guesses, 
 based on the data contained in the contributor's accounts. Employer guesses were collected from account information, synthesized into a final guess for each contributor, and inspected and corrected manually.
 Employer guesses were generated from the following sources:
@@ -164,4 +155,4 @@ Once these guesses were generated, a determination of each contributor's employe
 Additionally, any employer name that appeared only once in the dataset was included in manual verification, based on the idea that it was more likely to be incorrectly determined, as opposed to the alternative possibility, which is that the organization assigned only one person to the projects.
 The manual verification uncovered the true employers of all but six of the contributors whose employer name was missing or dubious. Instead of excluding these contributors from further analysis, their employer names were set to \verb|Unknown <Unique_ID>|, effectively classifying them as independent volunteers. Of the 92 contributors with dubious employer name, 42 were found to be incorrect, and subsequently corrected.
 
-In the final step of data cleaning, different spellings and capitalizations of employer names were normalized by manually constructing a mapping table from each variant spelling to the most popular spelling (in terms of how many of the mined contributors used it in their profiles.) The total number of unique employers in the dataset, including the six unknown ones, was 93.
+In the final step of data cleaning, different spellings and capitalizations of employer names were normalized by manually constructing a mapping table from each variant spelling to the most common spelling (in terms of how many of the contributors used it in their profiles.) The total number of unique organizations in the dataset, including the six unknown ones, was 93. The number of active contributors per organization is listed in table \ref{tab:orgcontributors} of appendix \ref{ch:orgdata}.

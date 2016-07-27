@@ -37,3 +37,13 @@
 	\\\hline\organization & \score
 }
 \end{longtable}
+
+\chapter{Organization Data}\label{ch:orgdata}
+\begin{table}
+	\begin{longtable}{l|c}%
+		\bfseries Organization & \bfseries Contributor Count% specify table head
+		\csvreader[head to column names]{companypeoplecount.csv}{}% use head of csv as column names
+		{\\\hline\company & \personcount}% specify your coloumns here
+	\end{longtable}
+	\caption{Number of active contributors per organization during \timeperiod}\label{tab:orgcontributors}
+\end{table}
