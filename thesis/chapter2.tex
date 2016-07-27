@@ -2,33 +2,34 @@
 
 \section{Initial Research Question and Data Collection}
 
-The original intent of this research project was to identify differences in commit behavior between paid and volunteer contributors of open source projects. In order to classify contributors as paid or volunteer, a script was written which collected data from various public online profiles of ASF contributors active in 2015 and computed several heuristics;  the intent was to use some of this data features 
-to classify individuals as paid or volunteer. 
- However, two issues made it difficult to identify the differences between the two classes:
+The original intent of this research project was to identify differences in commit behavior between paid and volunteer contributors of open source projects. In order to classify contributors as paid or volunteer, a script was written which collected data from various public online profiles of ASF contributors active in 2015 and used several heuristics to classify individuals as paid or volunteer. 
+However, two issues made it difficult to identify the differences between the two classes:
 \begin{enumerate}
 	\item \label{manypaid} For a given ASF project and time period, the proportion of active contributors who are paid to work on the project can be very high, sometimes nearing 100\%.
 	\item \label{novolunteers} A profile can contain certain markers that are highly correlated with paid contributors, but there are no known markers that are highly correlated with volunteer contributors.
 \end{enumerate}
 Issue \#\ref{manypaid} was \emph{prima facie} quite surprising---one might expect there to be a somewhat even mix of paid and volunteer contributors, but upon manually examining contributors to a couple projects, it was discovered that these projects were almost exclusively developed by employees of a few companies during the time period under observation. With such skewed samples, it became difficult to write a classifier sensitive enough to be useful.
 Issue \#\ref{novolunteers} was an unforeseen limitation of using profile information to identify social group affiliation. Ultimately, there was no reliable way to differentiate between a volunteer and a paid contributor when his/her data does not reveal any obvious link between his/her contributions and his/her employer.
+
 Since creating this classifier proved infeasible, the data was re-purposed to do a social network analysis of ASF contributions instead. In particular, the following facets of the existing dataset were useful for this purpose:
 \begin{itemize}
-	\item The dataset associates data from multiple accounts/profiles to one contributor, improving the reliability of finding a given contributor's employer.
-	\item Since the contributor's employer was one of the data points which the algorithm used, a fair amount of employer data was already available.
+	\item For any given contributor, the dataset typically contained data from multiple accounts/profiles, which improved the reliability of finding a given contributor's employer.
+	\item Since the contributor's employer name was necessary for one of the heuristics, a fair amount of employer data was already available.
 \end{itemize}
+In addition, since the dataset included information about JIRA contributions, these contributions were also considered (alongside commits) when creating edges in the social network. This revealed organizational connections that would not have appeared when considering commits alone.
 
 \section{Data Sources}
 
-To find the employer of a given Git committer, the script attempts to collect data from the Git account, and any associated JIRA and/or Github accounts. It also utilizes the Google Custom Search API to find links to LinkedIn profiles, which can then be inspected manually. Each set of values is stored in a separate entry in a PostgreSQL database, to maximize the amount of information available for finding a contributor's employer.
+In order to identify the employers of the project contributors, the script attempts to collect relevant data from Git, JIRA, and Github accounts. It also utilizes the Google Custom Search API to find links to contributors' LinkedIn profiles, which can then be inspected manually. Each of these sets of values is stored in a separate entry in a relational database, to maximize the amount of information available for finding a contributor's employer.
 The following information is mined from Git, Github, and JIRA accounts:
 \begin{itemize}
 	\item Username
 	\item Email address
 	\item Display name
 \end{itemize}
-The following additional information is mined from Git accounts:
+The following additional information is mined from Git logs:
 \begin{itemize}
-	\item Commit count per project
+	\item Number of commits authored by each account during \timeperiod
 \end{itemize}
 The following additional information is mined from Github accounts:
 \begin{itemize}
@@ -36,7 +37,11 @@ The following additional information is mined from Github accounts:
 	\item Company name
 	\item List of organizations
 \end{itemize}
-Furthermore, to work around the rate limit of the Github API, the script utilized a GHTorrent.org database dump as an offline cache of Github data.
+The following additional information is mined from JIRAs:
+\begin{itemize}
+	\item Number of issues created or resolved by each account during \timeperiod
+\end{itemize}
+In addition, to work around the rate limits of the Github API, the script utilized an offline GHTorrent database dump as a cache of Github account data. GHTorrent is a repository containing terabytes of Github data, developed by Georgios Gousios to aid software repository research\cite{Gousi13}.
 
 \pddone{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects} \bmdone{Created section ``Database Schema'', please review.}
 
