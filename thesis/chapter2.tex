@@ -48,9 +48,7 @@ In addition, to work around the rate limits of the Github API, the script utiliz
 \section{Database Schema}
 All the collected data was stored in a set of relational databases. Due to technical limitations in some of the project's external dependencies, multiple different databases were required. The following subsections describe the purpose and schema of each database. In the schema diagrams, foreign keys are denoted with an asterisk.
 \subsection{GHTorrent Database}
-A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a "proxy cache" for the live Github data, which helped us  
-%up the data collection process because it provided a way to 
-avoid encountering the Github API rate limit as frequently. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}.
+A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a ``proxy cache'' for the live Github data, which helped us avoid encountering the Github API rate limit as frequently. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}.
 \begin{figure}
 	\includegraphics[width=\textwidth]{GHTorrentSchema.png}
 	\centering
@@ -66,9 +64,9 @@ avoid encountering the Github API rate limit as frequently. The relevant portion
 	\label{fig:cvsanalySchema}
 \end{figure}
 \subsection{Main Database}
-The main research database contains all the data collected from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on CVSAnalY2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}.
+The main research database contains all the data collected from Git, Github, and JIRA, and all data derived thereof. It is stored in PostgreSQL\footnote{At the time when the database was created, there was not yet a dependency on CVSAnalY2 or GHTorrent, so it was created in PostgreSQL. By the point when it became clear that the dependencies required MySQL, the cost of porting the existing code to use it outweighed the benefits of using a single DBMS, so the main database remained in PostgreSQL. Since the databases were generally accessed through the SQLAlchemy ORM abstraction layer anyway, this was not too much of an inconvenience.}. The data in this database is used to build the \textbf{contributorprojectcommitcount} table, which is then imported into R for social network analysis.
 
-The most important tables are \textbf{contributors} and \textbf{contributoraccounts}. \textbf{contributoraccounts} stores the data for each Git, Github, and JIRA account. Each row has a foreign key to \textbf{contributors}, which allows the association of multiple accounts to a single person. The table \textbf{emailprojectcommitcount} maps an email address found in \textbf{accountprojects} to the number of commits that account authored for each project. With these three tables, we derive \textbf{contributorprojectcommitcount}. The table \textbf{contributorcompanies} maps a contributor to their employer. The generation of this table is discussed in subsequent sections. Joining \textbf{contributorcompanies} and \textbf{contributorprojectcommitcount} creates \textbf{companyprojectcommitcount}, which is then used as the basis of generating the organizational social networks. The schema for this database is shown in figure \ref{fig:mainSchema}.
+The primary tables for the data collection are \textbf{contributors} and \textbf{contributoraccounts}. \textbf{contributoraccounts} stores the data for each Git, Github, and JIRA account. Each row has a foreign key to \textbf{contributors}, which allows the association of multiple accounts to a single person. The table \textbf{emailprojectcommitcount} maps an email address found in \textbf{accountprojects} to the number of commits that account authored for each project. With these three tables, we derive \textbf{contributorprojectcommitcount}. The table \textbf{contributorcompanies} maps a contributor to their employer. The generation of this table is discussed in section \ref{employersec}. Joining \textbf{contributorcompanies} and \textbf{contributorprojectcommitcount} creates \textbf{companyprojectcommitcount}, which is then used as the basis of generating the organizational social networks. The schema for this database is shown in figure \ref{fig:mainSchema}.
 % TODO: decide if necessary to include accountprojects
 \begin{figure}
 	\includegraphics[width=\textwidth]{mainSchema.png}
@@ -78,14 +76,18 @@ The most important tables are \textbf{contributors} and \textbf{contributoraccou
 \end{figure}
 
 \section{Data Collection Constraints}
-Since a contributor's employer name can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for whom no employer name could be found. A further constraint is that if this information cannot be mined automatically for most people, it becomes infeasible to fill missing values in the dataset through manual inspection. After performing some case studies, it was found that this can be a significant problem for larger projects such as Apache Kafka, which have many individual committers. However, the vast majority of commits to a project typically came from a small group of the committers, whose employers could more easily be found. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project for the time period under observation. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
+Building a social network of employers from contribution artifacts was not trivial, because employment is a social abstraction, as opposed to a value that can be directly extracted from these artifacts. In order to make this project feasible, a few constraints needed to be placed upon the scope of the data collection.
+
+One specific issue with the data collection was that since a contributor's employer name can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for whom no employer name could be found. Furthermore, this information must be mined automatically for the majority of contributors, or else it becomes infeasible to manually fill in all the missing values. After performing some trial experiments, it was found that achieving high employer identification rates can be very challenging on larger projects such as Apache Kafka, which have many individual contributors. 
+However, it was still possible to accurately measure organizational contributions, for the following reason: through experimentation it was found that the vast majority of commits to a project typically came from a small subset of the committers; since these contributors were the most active, it was sufficient to identify only their employers and ignore the others, without damaging the validity of the results. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project during \timeperiod. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
+
 An additional constraint was that only ASF projects which met the following conditions were considered:
 \begin{itemize}
-	\item The project is listed in the GHTorrent.org database
+	\item The project is listed in the GHTorrent database
 	\item The project has a JIRA hosted at \ASFJIRAURL
 	\item At least 20 commits were done to the project within the period under observation
 \end{itemize}
-These constraints resulted in the exclusion of projects which lacked sufficient data to analyze. The final set of projects mined is shown in table \ref{tab:projectcommitcounts}
+These constraints resulted in the exclusion of projects which lacked sufficient data to analyze. The final set of projects mined is shown in table \ref{tab:projectcommitcounts}.
 
 \begin{table}
 	\begin{tabular}{l|c}%
