@@ -983,7 +983,7 @@ class JIRADB(object):
                 orgusers = aliased(self.ghtorrentusers)
                 rows = self.ghtorrentsession.query(self.ghtorrentorganization_members,
                                                    orgusers.c.login.label('orglogin')).join(self.ghtorrentusers,
-                                                                                            self.ghtorrentorganization_members.c.user_id == self.ghtorrentusers.c.id).join(
+                                                   self.ghtorrentorganization_members.c.user_id == self.ghtorrentusers.c.id).join(
                     orgusers, self.ghtorrentorganization_members.c.org_id == orgusers.c.id).filter(
                     self.ghtorrentusers.c.login == contributor.ghLogin)
                 # check if any of those orgs are a possibly contributing org
@@ -1008,7 +1008,7 @@ class JIRADB(object):
                 committerRows = self.ghtorrentsession.query(subq.c.committer_id.distinct(),
                                                             self.ghtorrentusers.c.name).join(self.ghtorrentusers,
                                                                                              subq.alias(
-                                                                                                 'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
+                                                            'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
                 if person.displayName in [committer.name for committer in committerRows]:
                     isRelatedProjectCommitter = True
                     break

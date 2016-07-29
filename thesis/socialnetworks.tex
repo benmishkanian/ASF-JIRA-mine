@@ -1,6 +1,9 @@
 \chapter{Organizational Social Networks}
+\pd{Begin each chapter (including this one) with a brief introductory summary sentence. e.g., In this chapter, we present some background on social network methods, and describe how we used them to analyze the interactions between companies and projects in the  Apache Software Foundation}
 \section{Application of Social Networks to OSS Research}
-In research projects concerning OSS, social networks are a useful tool to build understanding of the overall structure and flow of the distributed collaboration. Madey, Freeh, and Tynan\cite{madey2002open}, for instance, used social networks to perform an empirical study of collaboration on SourceForge projects, facilitating their discovery that the number of developers per project and the number of projects per developer both have power-law distributions. Similarly, by modeling organizational collaborations in ASF projects as a social network, we can answer questions about the high-level scope and structure of organizational involvement in ASF.
+In research projects concerning OSS, social networks are a useful tool to build understanding of the overall structure and flow of the distributed collaboration. Madey, Freeh, and Tynan\cite{madey2002open}, for instance, used social networks to perform an empirical study of collaboration on SourceForge projects, finding that the number of developers per project and the number of projects per developer both have power-law distributions.
+\pd{Add one more example, e.g., the clustering work in Bird FSE 2007}. 
+ Similarly, by modeling organizational collaborations in ASF projects as a social network, we can answer questions about the high-level scope and structure of organizational involvement in ASF. 
 
 For the present study, social networks were employed to find out the centralization level of organizational contributions to ASF, and to pinpoint the organizations which are most central to ASF project development. In addition to computing these values, the social networks were plotted using R, which provided a visual overview of the network structure. Afterwards, some of the most interesting phenomena observed in these network analyses were investigated in more detail, in order to better understand what caused them to appear, and what effects they had on the network.
 \section{Building the Network}
@@ -8,7 +11,8 @@ Once the contributors' commit counts and employers were known, a social network 
 \begin{enumerate}
 	\item The \textbf{companyprojectcommitcount} table was joined with itself on column \textbf{project} and the two commit counts of each row were summed into one, creating an edge list for organizations, with the summed commit count as the edge weight.
 	\item The edge list was imported into R, and symmetric edges created by the join were removed.
-	\item If two edges connected the same pair of vertices (caused by two organizations being connected through multiple projects), the edges were merged by summing their commit counts. \pd{Briefly explain why multiple edges may arise between a single pair of nodes} \bm{Done.}
+	\item If two edges connected the same pair of vertices (caused by two organizations being connected through multiple projects), the edges were merged by summing their commit counts. 
+	%\pd{Briefly explain why multiple edges may arise between a single pair of nodes} \bm{Done.}
 	\item Networks were created using R packages \textbf{network} and \textbf{igraph}.
 \end{enumerate}
 Essentially, there was an undirected edge between organizations A and B when a member of A and a member of B contributed to the same project. The edge weight was the sum of the number of commits from A's members and the number of commits from B's members to all projects where they both contributed.
@@ -34,11 +38,12 @@ Measuring the centrality of nodes in a network can be an effective way to learn 
 The centrality of a vertex is a measure of how close it is to the ``center of action'' in a network. There are multiple different ways to measure centrality, but the most common are degree centrality, closeness centrality, and betweenness centrality. Each of these was computed for all vertices in the organizational networks. The next three subsections provide more detail on these measures, followed by a discussion on the centralization of the network as a whole.
 
 \subsection{Degree Centrality}
-Degree centrality is measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. The following formula was used to calculate degree centrality of vertex v in graph G: 
+Degree centrality is measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. The following formula was used to calculate degree centrality of vertex v in graph G \pd{explain what V(G) and E(G) is}: 
 \begin{equation*}
 C(v) = | {i\:in\:V(G) : (i,v)\:in\:E(G)} |+|{i\:in\:V(G) : (v,i)\:in\:E(G)}|
 \end{equation*}
-This is the ``Freeman'' degree---the sum of the indegree and outdegree of the vertex v. A table of the organizations with the highest degree centrality is shown in table \ref{tab:degree}. \pd{Provide a fomula for degree centrality}. \bm{Done.}
+This is the ``Freeman'' degree---the sum of the indegree and outdegree of the vertex v. A table of the organizations with the highest degree centrality is shown in table \ref{tab:degree}.
+%  \pd{Provide a fomula for degree centrality}. \bm{Done.}
 
 \begin{table}
 	\begin{tabular}{l|c}%
@@ -54,7 +59,8 @@ Closeness centrality is a measure of how ``close'' a vertex is to all others in 
 \begin{equation*}
 	C(v) = (|V(G)|-1)/sum( d(v,i),\:i\:in\:V(G),\:i \neq v )
 \end{equation*}
-where d(i,j) is ``the geodesic distance between i and j (where defined)''\cite{butts}. A geodesic is the shortest path between two vertices. If there is no path between the vertices, the geodesic is undefined. \pd{Explain geodesic, and when it might not be defined} \bm{Done.}
+where d(i,j) is ``the geodesic distance between i and j (where defined)''\cite{butts}. A geodesic is the shortest path between two vertices. If there is no path between the vertices, the geodesic is undefined. 
+%\pd{Explain geodesic, and when it might not be defined} \bm{Done.}
 
 A table of the organizations with the highest closeness centrality is shown in table \ref{tab:closeness}. Unlike degree centrality, closeness centrality takes into account the distances to vertices that are more than one edge away. This means that vertices raking high in closeness centrality are central to the network as a whole, rather than simply central to their neighborhoods. For example, SK Telecom has low closeness, but high degree. Looking back at the visualization in figure \ref{fig:orgCommunities}, we can see this is because it is directly in the center of the large central cluster, which provides it many direct edges, but insulates it from all other clusters. In the other extreme, Fitbit has high closeness but relatively low degree, because although it has short paths to most clusters, it achieved this through a small number of links to other linchpin organizations. Still, eight out of the ten organizations are included in both lists, so already a pattern begins to emerge about which organizations are most central overall.
 
@@ -69,7 +75,7 @@ A table of the organizations with the highest closeness centrality is shown in t
 \end{table}
 
 \subsection{Betweenness Centrality}
-\pd{Need to provide a more formal definition of how it is calculated} \bm{Done.}
+%\pd{Need to provide a more formal definition of how it is calculated} \bm{Done.}
 Betweenness centrality is a measure of how frequently a vertex appears in the list of shortest paths between all other vertices. Stated differently, it measures how likely it is that vertex V must be traversed when taking the shortest path between arbitrary vertices A and B. Betweenness places more emphasis on the importance of edges than closeness does; an edge that is on many shortest paths is likely to confer high between centrality scores on its incident vertices. The betweenness of a vertex was computed using the following formula:
 \begin{equation*}
 C(v) = sum( g_{ivj} / g_{ij},\:i,j: i \neq j,i \neq v,j \neq v )
@@ -113,7 +119,9 @@ The difference between the centralization values computed when using closeness v
 \end{table}
 
 \section{Cluster Analysis}\label{clustersection}
-The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, it is clear that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects. However, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters to the projects most of their members contribute to.
+The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, it is clear that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects.
+ \pd{The previous sentence needs more details and justification. Add a few sentences explaining why you find that GN is doing something sophisticated}
+  However, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters to the projects most of their members contribute to..\pd{Don't end sentences a proposition with :-)}
 
 \begin{table}
 	\begin{tabular}{l|c}
