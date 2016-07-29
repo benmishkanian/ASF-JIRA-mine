@@ -1,21 +1,26 @@
 \chapter{Organizational Social Networks}
+\pd{Begin each chapter (including this one) with a brief introductory summary sentence. e.g., In this chapter, we present some background on social network methods, and describe how we used them to analyze the interactions between companies and projects in the  Apache Software Foundation}
 \section{Application of Social Networks to OSS Research}
-In research projects concerning OSS, social networks are a useful tool to build understanding of the overall structure and flow of the distributed collaboration. Madey, Freeh, and Tynan\cite{madey2002open}, for instance, used social networks to perform an empirical study of collaboration on SourceForge projects, finding that the number of developers per project and the number of projects per developer both have power-law distributions. Similarly, by modeling organizational collaborations in ASF projects as a social network, we can answer questions about the high-level scope and structure of organizational involvement in ASF.
+In research projects concerning OSS, social networks are a useful tool to build understanding of the overall structure and flow of the distributed collaboration. Madey, Freeh, and Tynan\cite{madey2002open}, for instance, used social networks to perform an empirical study of collaboration on SourceForge projects, finding that the number of developers per project and the number of projects per developer both have power-law distributions.
+\pd{Add one more example, e.g., the clustering work in Bird FSE 2007}. 
+ Similarly, by modeling organizational collaborations in ASF projects as a social network, we can answer questions about the high-level scope and structure of organizational involvement in ASF. 
 
 For the present study, social networks were employed to find out the centralization level of organizational contributions to ASF, and to pinpoint the organizations which are most central to ASF project development. In addition to computing these values, the social networks were plotted using R, which provided an visual overview of the network structure. Afterwards, some of the most interesting phenomena observed in these network analyses were investigated in more detail, in order to better understand what caused them to appear, and what effects they have on the network.
 \section{Building the Network}
 Once the contributors' commit counts and employers were known, a social network of organizations was created based on the shared collaborations of their members. This was done in the following steps:
 \begin{enumerate}
 	\item The \textbf{companyprojectcommitcount} table was joined with itself on column \textbf{project} and the two commit counts of each row were summed into one, creating an edge list for companies, with the summed commit count as the edge weight.
-	\item The edge list was imported into R, symmetric edges were removed, and edges connecting the same vertices were merged by summing their commit counts. \pd{Briefly explain why multiple edges may arise between a single pair of nodes} 
+	\item The edge list was imported into R, and symmetric edges created by the join were removed.
+	\item If two edges connected the same pair of vertices (caused by two organizations being connected through multiple projects), the edges were merged by summing their commit counts. 
+	%\pd{Briefly explain why multiple edges may arise between a single pair of nodes} \bm{Done.}
 	\item Networks were created using R packages \textbf{network} and \textbf{igraph}.
 \end{enumerate}
 Essentially, there was an undirected edge between organizations A and B when a member of A and a member of B contributed to the same project. The edge weight was the sum of the number of commits from A's members and the number of commits from B's members to all projects where they both contributed.
 
 \section{Network Plots}
-One challenge in plotting complex networks is that when there are many nodes and edges, it becomes difficult to discern the structure of a network by looking at the plot, especially if it was plotted using a simple algorithm. Since the organizational network had 90 vertices and 622 edges, a more sophisticated plotting approach was necessary. In their 2004 paper\cite{gonzalez2004community}, Gonz{\'a}lez-Barahona, L{\'o}pez, and Robles demonstrated that the Girvan-Newman (GN) algorithm can generate a hierarchical graph layout, which makes it easier to visually identify graph structure. They applied this method to plotting a network of developers of the Apache HTTP Server, the founding project of the ASF, and asserted that the GN algorithm provides ``a step forward at least in the aspect of offering a way to visually identify an affiliation network,'' compared to the classical network analysis algorithms used by previous works. Since the GN algorithm was shown to be effective for highlighting the structure of Apache developer network, it was applied for plotting the ASF organizational network.
+One challenge in plotting complex networks is that when there are many nodes and edges, it becomes difficult to discern the structure of a network by looking at the plot, especially if it was plotted using a simple algorithm. Since the organizational network had 90 vertices and 622 edges, a more sophisticated plotting approach was necessary. In their 2004 paper\cite{gonzalez2004community}, Gonz{\'a}lez-Barahona, L{\'o}pez, and Robles demonstrated that the Girvan-Newman (GN) algorithm, which can be used to generate a hierarchical graph layout, makes it easier to visually identify graph structure. They applied this method to plotting a network of developers of the Apache HTTP Server, the founding project of the ASF, and asserted that the GN algorithm provides ``a step forward at least in the aspect of offering a way to visually identify an affiliation network,'' compared to the classical network analysis algorithms used by previous works. Since the GN algorithm was shown to be effective for highlighting the structure of Apache developer network, it was applied for plotting the ASF organizational network.
 
-An image of the plot is shown in figure \ref{fig:orgCommunities}. This plot was generated using the R package \verb|igraph|, which contains a function named \verb|edge.betweenness.community| that implements the GN algorithm to generate a ``communities'' object. Communities highlight graph structure by grouping vertices into different neighborhoods based on their edges. In the figure, each community is shaded with a different color, and vertices in the same community are colored the same, making it easier to see the relationships between clusters. Edge weights are not reflected in this graph, as the vertices could not be spread out far enough to allow increasing edge thickness without causing disruption.
+An image of the plot is shown in figure \ref{fig:orgCommunities}. This plot was generated using the R package \verb|igraph|, which contains a function named \verb|edge.betweenness.community| that implements the GN algorithm to generate a ``communities'' object. Communities highlight graph structure by grouping vertices into different neighborhoods based on their edges. In the figure, each community is shaded with a different color, and vertices in the same community are colored the same, making it easier to see the relationships between clusters. Edge weights are not reflected in this graph, as the vertices could not be spread out far enough to allow increasing edge thickness without causing disruption. The number of contributing members in an organization is reflected in the vertex size.
 
 In looking at the graph, it is immediately apparent that there are identifiable clusters of organizations that are in close collaboration, and there are a few ``linchpin'' organizations which connect these clusters. Although the center cluster is still a bit too cluttered, the easy identifiability of the communities and the vertices connecting them provides further evidence that hierarchical algorithms such as GN are well-suited for the task of exhibiting the structure of complex social networks. A closer analysis of the clusters is provided in section \ref{clustersection}.
 \begin{figure}
@@ -33,7 +38,12 @@ Measuring the centrality of nodes in a network can be an effective way to learn 
 The centrality of a vertex is a measure of how close it is to the ``center'' of action in a network. There are multiple different ways to measure centrality, but the most common are degree centrality, closeness centrality, and betweenness centrality. Each of these was computed for all vertices in the organizational networks. The next three subsections provide more detail on these measures, followed by a discussion on the centralization of the network as a whole.
 
 \subsection{Degree Centrality}
-Degree centrality is simply measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. A table of the organizations with the highest degree centrality is shown in table \ref{tab:degree}. \pd{Provide a fomula for degree centrality}. 
+Degree centrality is measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. The following formula was used to calculate degree centrality of vertex v in graph G \pd{explain what V(G) and E(G) is}: 
+\begin{equation*}
+C(v) = | {i\:in\:V(G) : (i,v)\:in\:E(G)} |+|{i\:in\:V(G) : (v,i)\:in\:E(G)}|
+\end{equation*}
+This is the ``Freeman'' degree---the sum of the indegree and outdegree of the vertex v. A table of the organizations with the highest degree centrality is shown in table \ref{tab:degree}.
+%  \pd{Provide a fomula for degree centrality}. \bm{Done.}
 
 \begin{table}
 	\begin{tabular}{l|c}%
@@ -47,9 +57,10 @@ Degree centrality is simply measuring centrality using the degree (i.e. the numb
 \subsection{Closeness Centrality}
 Closeness centrality is a measure of how ``close'' a vertex is to all others in the network. For the present study, the closeness of two vertices was computed using the following formula:
 \begin{equation*}
-	C(v) = (|V(G)|-1)/sum( d(v,i), i in V(G), i!=v )
+	C(v) = (|V(G)|-1)/sum( d(v,i),\:i\:in\:V(G),\:i \neq v )
 \end{equation*}
-where where d(i,j) is the geodesic distance between i and j (where defined)\cite{butts}. \pd{Explain geodesic, and when it might not be defined} 
+where d(i,j) is ``the geodesic distance between i and j (where defined)''\cite{butts}. A geodesic is the shortest path between two vertices. If there is no path between the vertices, the geodesic is undefined. 
+%\pd{Explain geodesic, and when it might not be defined} \bm{Done.}
 
 A table of the organizations with the highest closeness centrality is shown in table \ref{tab:closeness}. Unlike degree centrality, closeness centrality takes into account the distances to vertices that are more than one edge away. This means that vertices raking high in closeness centrality are central to the network as a whole, rather than simply central to their neighborhoods. For example, SK Telecom has low closeness, but high degree. Looking back at the visualization in figure \ref{fig:orgCommunities}, we can see this is because it is directly in the center of the large central cluster, which provides it many direct edges, but insulates it from all other clusters. In the other extreme, Fitbit has high closeness but relatively low degree, because although it has short paths to most clusters, it achieved this through a small number of links to other linchpin organizations. Still, eight out of the ten organizations are included in both lists, so already a pattern begins to emerge about which organizations are most central overall.
 
@@ -64,8 +75,12 @@ A table of the organizations with the highest closeness centrality is shown in t
 \end{table}
 
 \subsection{Betweenness Centrality}
-\pd{Need to provide a more formal definition of how it is calculated} 
-Betweenness centrality is a measure of how frequently a vertex appears in the list of shortest paths between all other vertices. Stated differently, it measures how likely it is that vertex V must be traversed when taking the shortest path between arbitrary vertices A and B. Betweenness places more emphasis on the importance of edges than closeness does; an edge that is on many shortest paths is likely to confer high between centrality scores on its incident vertices.
+%\pd{Need to provide a more formal definition of how it is calculated} \bm{Done.}
+Betweenness centrality is a measure of how frequently a vertex appears in the list of shortest paths between all other vertices. Stated differently, it measures how likely it is that vertex V must be traversed when taking the shortest path between arbitrary vertices A and B. Betweenness places more emphasis on the importance of edges than closeness does; an edge that is on many shortest paths is likely to confer high between centrality scores on its incident vertices. The betweenness of a vertex was computed using the following formula:
+\begin{equation*}
+C(v) = sum( g_{ivj} / g_{ij},\:i,j: i \neq j,i \neq v,j \neq v )
+\end{equation*}
+where $g_{ijk}$ is ``the number of geodesics from i to k through j''\cite{butts}. 
 
 A table of the organizations with the highest betweenness centrality is shown in table \ref{tab:betweenness}. One change that immediately stands out is that Red Hat is ranked second, whereas in the other two rankings it was not even in the top ten. This can be explained by taking another look at figure \ref{fig:orgCommunities}. At first glance, Red Hat seems to have similar positioning to Fibit, in that it has a medium number of edges to some other important actors. However, the difference is that Fitbit's direct connections are all in the 3 clusters nearest to it, whereas Red Hat has far-reaching connections to several clusters on the other side of the graph. This means that the shortest paths between nodes at the periphery of the graph are much more likely to require use of Red Hat's edges, because it is an efficient bridge between clusters, compared to Fitbit's edges.
 
@@ -104,30 +119,47 @@ The difference between the centralization values computed when using closeness v
 \end{table}
 
 \section{Cluster Analysis}\label{clustersection}
-The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, it is clear that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects. \pd{The previous sentence needs more details and justification. Add a few sentences explaining why you find that GN is doing something sophisticated}However, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters to the projects they are most associated with.\pd{Don't end sentences a proposition with :-)}
+The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, it is clear that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects.
+ \pd{The previous sentence needs more details and justification. Add a few sentences explaining why you find that GN is doing something sophisticated}
+  However, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters to the projects most of their members contribute to..\pd{Don't end sentences a proposition with :-)}
 
 \begin{table}
 	\begin{tabular}{l|c}
 		\bfseries Cluster & \bfseries Associated Projects \\
 		\hline
-		Salesforce, Gruter, Twitter, etc. & hbase \\
+		Salesforce, Gruter, etc. & bigtop \\
+		\hline
 		Docker & aurora \\
+		\hline
 		DataStax & cassandra \\
-		Shapeblue, Citrix, CloudOps, etc. & cloudstack \\
+		\hline
+		Shapeblue, Citrix, etc. & cloudstack \\
+		\hline
 		NASA, Google Summer of Code & climate \\
+		\hline
 		Unico, Unknown 1 & curator \\
-		Hortonworks, IBM, Confluent, etc. & spark, sqoop, storm, kafka, knox \\
-		Data Artisans, KTH, TU Berlin, etc. & flink \\
-		Red Hat, Fitbit, Google, etc. & libcloud \\
+		\hline
+		Hortonworks, Confluent, etc. & spark, storm, kafka, oozie, bigtop, flink, hbase, samza \\
+		\hline
+		Data Artisans, KTH, etc. & flink \\
+		\hline
+		Red Hat, Fitbit, etc. & libcloud \\
+		\hline
 		Microsoft & reef \\
+		\hline
 		GridGain & ignite \\
+		\hline
 		InMobi & lens \\
+		\hline
 		Oracle, Perforce & derby \\
+		\hline
 		eBay, Elementum, Meituan & kylin \\
+		\hline
 		Tirasa, Capgemini Poland & cxf \\
-		JDriven, Energized Work, Univ. of Minnesota, etc. & groovy
+		\hline
+		JDriven, Ampool, etc. & groovy
 	\end{tabular}
 	\caption{The projects associated with each cluster}\label{tab:clusterprojects}
 \end{table}
 
-Evidently, most clusters have one main project that they are associated with, with the only exception being the center cluster, which is closely associated with five projects. The relatively large number of projects controlled by the central cluster goes a long way in explaining why the cluster is so large and complex. Digging deeper into the original dataset, it was revealed that the major actors in this cluster, such as Hortonworks, contributed to most or all of the projects in this cluster, implying that the projects are closely related. The fact that these organizations are actively contributing to so many projects is likely related to the fact that many of these organizations are some of the largest in the network in terms of member count. One interesting question for future work is to determine what causal relationship (if any) exists between these two observations.
+Evidently, most clusters have one main project that they are closely associated with, with the only exception being the center cluster, which is associated with several projects. The relatively large number of projects controlled by the central cluster goes a long way in explaining why the cluster is so large and complex. Digging deeper into the original dataset, it was revealed that the major actors in this cluster, such as Hortonworks, contributed to most or all of the projects in this cluster, implying that the projects are closely related. The fact that these organizations are actively contributing to so many projects is likely related to the fact that many of these organizations are some of the largest in the network in terms of member count. One interesting question for future work is to determine what causal relationship (if any) exists between these two observations.

@@ -1,4 +1,4 @@
-\chapter{Centrality Scores}
+\chapter{Centrality Scores}\label{ch:centralities}
 \DTLloaddb{degtab}{fulldegree.csv}
 \begin{longtable}{l|c}
 	\caption{Degree centrality of organizations}\label{tab:fulldegree}\\
@@ -37,3 +37,26 @@
 	\\\hline\organization & \score
 }
 \end{longtable}
+
+\chapter{Organization Data}\label{ch:orgdata}
+
+\DTLloaddb{orgdatatab}{companypeoplecount.csv}
+\begin{longtable}{l|c}
+	\caption{Number of active contributors per organization during \timeperiod}\label{tab:orgcontributors}\\
+	\bfseries Organization & \bfseries Contributor Count
+	
+	\DTLforeach{orgdatatab}{%
+		\company=company,%
+		\personcount=personcount%
+	}{%
+	\\\hline\company & \personcount
+}
+\end{longtable}
+
+\chapter{Source Code}
+Full source code for the project can be found at \url{https://github.com/benmishkanian/ASF-JIRA-mine}. The main files, jiradb.py and ASF\_SNA.R, are shown below.
+\section{jiradb.py}
+\lstset{basicstyle=\tiny, breaklines=true}
+\lstinputlisting{../jiradb.py}
+\section{ASF\_SNA.R}
+\lstinputlisting{"../ASF\string_SNA.R"}
