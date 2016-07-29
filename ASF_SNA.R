@@ -109,3 +109,10 @@ outputCommunitiesPlot <- function(orgCommunities, ig, outFile) {
     plot(orgCommunities, ig, vertex.size = unlist(V(ig)$weight), layout=layout.lgl, asp = 1.294)
     dev.off()
 }
+
+getCompanyProjectCount <- function() {
+    companyProjectCount <- doQuery("select company, count(project) as projectcount from companyprojectcommitcount group by company order by projectcount desc;")
+    write.csv(companyProjectCount, "CompanyProjectCount.csv", row.names = FALSE)
+    print(mean(companyProjectCount$projectcount))
+    median(companyProjectCount$projectcount)
+}

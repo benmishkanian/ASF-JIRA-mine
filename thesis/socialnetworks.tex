@@ -40,7 +40,7 @@ Measuring the centrality of nodes in a network can be an effective way to learn 
 The centrality of a vertex is a measure of how close it is to the ``center of action'' in a network. There are multiple different ways to measure centrality, but the most common are degree centrality, closeness centrality, and betweenness centrality. Each of these was computed for all vertices in the organizational networks. The next three subsections provide more detail on these measures, followed by a discussion on the centralization of the network as a whole.
 
 \subsection{Degree Centrality}
-Degree centrality is measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. The following formula was used to calculate degree centrality of vertex v in graph G \pd{explain what V(G) and E(G) is}: 
+Degree centrality is measuring centrality using the degree (i.e. the number of incident edges) of a vertex. For directed graphs, degree can be measured using indegree, outdegree, or the sum of the two. Since the organizational network is an undirected graph, all edges incident to a vertex were counted in the degree. The following formula was used to calculate degree centrality of vertex v in graph G, where V(G) and E(G) are the vertices and edges of G, respectively \pd{explain what V(G) and E(G) is}\bmdone{Done.}: 
 \begin{equation*}
 C(v) = | {i\:in\:V(G) : (i,v)\:in\:E(G)} |+|{i\:in\:V(G) : (v,i)\:in\:E(G)}|
 \end{equation*}
@@ -121,9 +121,9 @@ The difference between the centralization values computed when using closeness v
 \end{table}
 
 \section{Cluster Analysis}\label{clustersection}
-The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, it is clear that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects.
- \pd{The previous sentence needs more details and justification. Add a few sentences explaining why you find that GN is doing something sophisticated}
-  However, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters to the projects most of their members contribute to..\pd{Don't end sentences a proposition with :-)}
+The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, the relatively low number of clusters suggests that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects. (The average number of projects per organization was 1.95, with a median of 1, so a simple project-based grouping algorithm would likely create too many clusters to be useful\footnote{See table \ref{tab:orgprojects} in appendix \ref{ch:orgdata} for the full data of project count per organization.}.) At the same time, it created enough clusters to prevent the graph from devolving into a few large blobs. (For comparison, the greedy algorithm \textbf{fastgreedy.community} only created five clusters.)
+ \pd{The previous sentence needs more details and justification. Add a few sentences explaining why you find that GN is doing something sophisticated}\bm{Hopefully this explains it better. I also weakened the claim a bit.}
+  Still, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters with the projects where most of the cluster's organizations contribute.\pd{Don't end sentences a proposition with :-)}\bm{I see what you did there :) Fixed.}
 
 \begin{table}
 	\begin{tabular}{l|c}

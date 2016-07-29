@@ -53,6 +53,19 @@
 }
 \end{longtable}
 
+\DTLloaddb{orgprojtab}{CompanyProjectCount.csv}
+\begin{longtable}{l|c}
+	\caption{Number of projects each organization contributed to during \timeperiod}\label{tab:orgprojects}\\
+	\bfseries Organization & \bfseries Project Count
+	
+	\DTLforeach{orgprojtab}{%
+		\company=company,%
+		\projectcount=projectcount%
+	}{%
+	\\\hline\company & \projectcount
+}
+\end{longtable}
+
 \chapter{Source Code}
 Full source code for the project can be found at \url{https://github.com/benmishkanian/ASF-JIRA-mine}. The main files, jiradb.py and ASF\_SNA.R, are shown below.
 \section{jiradb.py}
