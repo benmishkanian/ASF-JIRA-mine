@@ -145,7 +145,7 @@ The only exception to these rules was that accounts which used the email address
 For each new contributor found (i.e. whenever a new account could not be associated with an existing account using the above rules), a row was added to the \textbf{contributors} table of the research database. Then, the new account information was used to query the GHTorrent database to find the associated Github account. Failing that, a similar query was performed against the live Github API. If the Github account was found, the login, company, and location values were stored in the newly created \textbf{contributors} row.
 
 \subsection{Employer Identification}\label{employersec}
-As described earlier, it was not always possible to immediately pinpoint a contributor's employer with high confidence. However, it was usually possible to generate a number of guesses, 
+As explained earlier, it was not always possible to immediately pinpoint a contributor's employer with a high degree of confidence. However, it was usually possible to generate a number of guesses, 
 based on the data contained in the contributor's accounts. Employer guesses were collected from account information, synthesized into a final guess for each contributor, and inspected and corrected manually.
 Employer guesses were generated from the following sources:
 \begin{itemize}
@@ -153,15 +153,15 @@ Employer guesses were generated from the following sources:
 	\item Domain name of email addresses
 	\item Employment history in LinkedIn profiles
 \end{itemize}
-LinkedIn page URLs were found by using Google Custom Search API to query linkedin.com using the concatenation of each account's display name and the name of the project that account contributed to. These pages were then inspected manually, to verify the match was correct, and to find out which organization employed the profile owner most recently during \timeperiod{}. ``Apache Software Foundation'' was never recorded as the true employer, because ASF has no employees\cite{asf}.
+LinkedIn page URLs were found by using Google Custom Search API to search linkedin.com using the concatenation of each account's display name and the name of the project that account contributed to. These pages were then inspected manually, to verify the match was correct, and to find out which organization employed the profile owner most recently during \timeperiod{}. ``Apache Software Foundation'' was never recorded as the true employer, because ASF has no employees\cite{asf}.
 
-Once these guesses were generated, a determination of each contributor's employer was made based on the following prioritization:
+Once these employer guesses were generated, a determination of each contributor's employer was made based on the following prioritization:
 \begin{enumerate}
 	\item If the employer name came from LinkedIn, it takes precedence over all other possibilities, because LinkedIn was usually the most up-to-date of the profiles, and employment history is an essential part of this profile.
 	\item Otherwise, if the contributor's Github profile listed an employer, it was taken.
 	\item If neither LinkedIn nor Github provided an employer guess, it was left for manual inspection.
 \end{enumerate}
-Additionally, any employer name that appeared only once in the dataset was included in manual verification, based on the idea that it was more likely to be incorrectly determined, as opposed to the alternative possibility, which is that the organization assigned only one person to the projects.
+Additionally, any employer name that appeared only once in the dataset was also included in manual verification, based off the intuition that such values were more likely to be incorrect, as opposed to the alternative possibility, which is that the organization assigned only one person to the projects.
 The manual verification uncovered the true employers of all but six of the contributors whose employer name was missing or dubious. Instead of excluding these contributors from further analysis, their employer names were set to \verb|Unknown <Unique_ID>|, effectively classifying them as independent volunteers. Of the 92 contributors with dubious employer name, 42 were found to be incorrect, and subsequently corrected.
 
 In the final step of data cleaning, different spellings and capitalizations of employer names were normalized by manually constructing a mapping table from each variant spelling to the most common spelling (in terms of how many of the contributors used it in their profiles.) The total number of unique organizations in the dataset, including the six unknown ones, was 93. The number of active contributors per organization is listed in table \ref{tab:orgcontributors} of appendix \ref{ch:orgdata}.
