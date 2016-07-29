@@ -23,23 +23,24 @@ In addition, since the dataset included information about JIRA contributions, th
 In order to identify the employers of the project contributors, the script attempts to collect relevant data from Git, JIRA, and Github accounts. It also utilizes the Google Custom Search API to find links to contributors' LinkedIn profiles, which can then be inspected manually. Each of these sets of values is stored in a separate entry in a relational database, to maximize the amount of information available for finding a contributor's employer.
 The following information is mined from Git, Github, and JIRA accounts:
 \begin{itemize}
-	\item Username
 	\item Email address
 	\item Display name
 \end{itemize}
 The following additional information is mined from Git logs:
 \begin{itemize}
-	\item Number of commits authored by each account during \timeperiod
+	\item Number of commits authored by each account during \timeperiod{}
 \end{itemize}
 The following additional information is mined from Github accounts:
 \begin{itemize}
+	\item Username
 	\item Location
 	\item Company name
 	\item List of organizations
 \end{itemize}
 The following additional information is mined from JIRAs:
 \begin{itemize}
-	\item Number of issues created or resolved by each account during \timeperiod
+	\item Username
+	\item Number of issues created or resolved by each account during \timeperiod{}
 \end{itemize}
 In addition, to work around the rate limits of the Github API, the script utilized an offline GHTorrent database dump as a cache of Github account data. GHTorrent is a repository containing terabytes of Github data, developed by Georgios Gousios to aid software repository research\cite{Gousi13}.
 
@@ -79,7 +80,7 @@ The primary tables for the data collection are \textbf{contributors} and \textbf
 Building a social network of employers from contribution artifacts was not trivial, because employment is a social abstraction, as opposed to a value that can be directly extracted from these artifacts. In order to make this project feasible, a few constraints needed to be placed upon the scope of the data collection.
 
 One specific issue with the data collection was that since a contributor's employer name can only be obtained if the contributor chooses to reveal it, there will typically be some individuals for whom no employer name could be found. Furthermore, this information must be mined automatically for the majority of contributors, or else it becomes infeasible to manually fill in all the missing values. After performing some trial experiments, it was found that achieving high employer identification rates can be very challenging on larger projects such as Apache Kafka, which have many individual contributors. 
-However, it was still possible to accurately measure organizational contributions, for the following reason: through experimentation it was found that the vast majority of commits to a project typically came from a small subset of the committers; since these contributors were the most active, it was sufficient to identify only their employers and ignore the others, without damaging the validity of the results. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S is at least 80\% of the number of commits done to the project during \timeperiod. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
+However, it was still possible to accurately measure organizational contributions, for the following reason: through experimentation it was found that the vast majority of commits to a project typically came from a small subset of the committers; since these contributors were the most active, it was sufficient to identify only their employers and ignore the others, without damaging the validity of the results. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S during \timeperiod{} is at least 80\% of the number of commits done to the project. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
 
 An additional constraint was that only ASF projects which met the following conditions were considered:
 \begin{itemize}
@@ -101,7 +102,7 @@ These constraints resulted in the exclusion of projects which lacked sufficient 
 		{\\\hline\project & \sum}% specify your coloumns here
 	\end{tabular}
 	\centering
-	\caption{The ASF projects mined, with the number of commits authored in \timeperiod}\label{tab:projectcommitcounts}
+	\caption{The ASF projects mined, with the number of commits authored in \timeperiod{}}\label{tab:projectcommitcounts}
 \end{table}
 
 \section{Data Collection Algorithm}
@@ -114,48 +115,49 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 	\item Generate a guess for the employer of each contributor (See section \ref{employersec}) \pd{Forward references here} \bmdone{I explain it in 2.5.5} \bm{Done.}
 \end{enumerate}
 
-Each individual set of profile data is stored in a row of the \textbf{contributoraccounts} table of the research database. This table relates account information to an ASF project which that account contributed to. The following sections provide more details on the data collection steps.
+Each individual set of profile data is stored in a row of the \textbf{contributoraccounts} table of the research database. This table relates individual contributors to the accounts that they used to contribute. The following sections provide more details on the data collection steps.
 
 \subsection{JIRA Data}\label{jirasec}
 \pddone{Use consistent typography for "JIRA"} \bmdone{In this context, jira is the package name, so it has the proper case. Is there a special way to typeset Python package names to make it more clear?}
 \pd{Jira is being used as a noun modifier, here so it's OK to use the same font here as everywhere} \bm{Fixed.}
-The JIRA Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod:
+The JIRA Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod{}:
 \begin{lstlisting}
 project = "P" AND created < "2016-06-01 00:00" AND (created >
  "2016-01-01 00:00" OR resolved < "2016-06-01 00:00")
 \end{lstlisting}
-After the issues were downloaded, each issue's metadata and history was processed to find JIRA accounts that either created or resolved the issue in \timeperiod. The profile information for each account was stored as an entry in \textbf{contributoraccounts}.
+After the issues were downloaded, each issue's metadata and history was processed to find JIRA accounts that either created or resolved the issue in \timeperiod{}. The profile information for each account was stored as an entry in \textbf{contributoraccounts}.
 \subsection{Git Data}\label{gitsec}
-The CVSAnalY2 tool was used to generate databases containing structured git log data for each project. Each log database was queried to obtain the number of commits authored in \timeperiod. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, the git account information was inserted into \textbf{contributoraccounts}, with the username column set to the Github account's username. Finally, if the email address had not been seen before, a row was added to table \textbf{emailprojectcommitcount} relating the address to the number of commits authored from that address to the project during \timeperiod.
+The CVSAnalY2 tool was used to generate databases containing structured Git log data for each project. Each log database was queried to obtain the total number of commits authored in \timeperiod{}. If it was less than 20, the project was excluded from further analysis. Otherwise, each commit author's email address was cross-referenced against the GHTorrent database to find his/her Github account(s). For each Github account found, a row was inserted into \textbf{contributoraccounts} with the Git account's email adress and display name, and with the username column set to the Github account's username. Finally, if the email address had not been seen before, a row was added to table \textbf{emailprojectcommitcount} relating the address to the number of commits authored from that address to the project during \timeperiod{}.
 \subsection{Github Data}\label{githubsec}
-Whenever a new Git or JIRA account was processed, the account information was used to query the GHTorrent database to find the associated Github account. Matching against Git account information was typically more reliable than using JIRA, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address instead, so the accounts could be associated through that.
+Whenever a new Git or JIRA account was processed, the account information was used to find the associated Github account. Matching against Git account information was typically more reliable than using JIRA, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address instead, so the accounts could be associated through that. The next section provides more detail on how this matching is done.
 
-Technically, Github allows an email address to be associated with only one Github account, but due to inaccuracies in the GHTorrent dataset, this constraint cannot be relied upon. To mitigate this problem, a row in \textbf{contributoraccounts} is created for each possible Github username linked with a given email address in GHTorrent, but the only direct usage of these usernames was for identity merging purposes. In cases where actual Github profile information was needed, the usernames were validated using the Github API before use, and the first valid one was taken as the contributor's official Github username.
-\subsection{Identity Merging}\label{mergingsec}
+A given contributor in the \textbf{contributors} table may have multiple associated Github usernames through different matchings of Git and JIRA account information. Technically, Github allows an email address to be associated with only one Github account, but due to inaccuracies in the GHTorrent dataset, this constraint cannot be relied upon. To mitigate this problem, although a row in \textbf{contributoraccounts} is created for each possible Github username linked with a given email address in GHTorrent, the only direct usage of these usernames was for identity matching purposes. In cases where actual Github profile information was needed, the usernames were validated using the Github API before use, and the first valid one was taken as the contributor's official Github username.
+
+Since one of the constraints placed on the mined projects was that the project was listed in GHTorrent, it was ensured that every project's Git repository was hosted (or at least mirrored) on Github. As a result, most of the contributors had a Github account. This was important because these accounts have several fields that help with employer identification, especially the ``company'' field, which is the only field in the dataset that can reveal an employer name directly.
+\subsection{Identity Matching}\label{mergingsec}
 Two accounts were considered to belong to the same person when at least one of the following was true:
 \begin{itemize}
 	\item The accounts use the same email address
 	\item The accounts use the same username and service (i.e. Git or JIRA)
 \end{itemize}
-The only exception to these rules was that accounts which used the email address ``dev-null@apache.org'' were not paired based on the email alone, because this is a shared email address used by multiple ASF contributors. For the purpose of identity merging, Git and Github were considered to be the same service.
+The only exception to these rules was that accounts which used the email address ``dev-null@apache.org'' were not paired based on the email alone, because this is a shared email address used by multiple ASF contributors. For the purpose of identity matching, Git and Github were considered to be the same service.
 
 For each new contributor found (i.e. whenever a new account could not be associated with an existing account using the above rules), a row was added to the \textbf{contributors} table of the research database. Then, the new account information was used to query the GHTorrent database to find the associated Github account. Failing that, a similar query was performed against the live Github API. If the Github account was found, the login, company, and location values were stored in the newly created \textbf{contributors} row.
 
-Matching Github accounts using Git account information was typically more reliable than using JIRA account information, since Github users are encouraged to add their Git email address to their Github accounts. However, in cases where the user did not do so, sometimes they used their JIRA account's email address instead, so the accounts could be associated through that.
 \subsection{Employer Identification}\label{employersec}
-As described earlier, it was not always possible to pinpoint a contributor's employer with high confidence. However, it was usually possible to generate a number of guesses, 
+As described earlier, it was not always possible to immediately pinpoint a contributor's employer with high confidence. However, it was usually possible to generate a number of guesses, 
 based on the data contained in the contributor's accounts. Employer guesses were collected from account information, synthesized into a final guess for each contributor, and inspected and corrected manually.
 Employer guesses were generated from the following sources:
 \begin{itemize}
 	\item ``Company'' field of Github profiles
 	\item Domain name of email addresses
-	\item LinkedIn
+	\item Employment history in LinkedIn profiles
 \end{itemize}
-LinkedIn page URLs were found by using Google Custom Search API to query linkedin.com using the concatenation of each account's display name and the name of the project that account contributed to. These pages were then inspected manually to find the current employer. 
+LinkedIn page URLs were found by using Google Custom Search API to query linkedin.com using the concatenation of each account's display name and the name of the project that account contributed to. These pages were then inspected manually, to verify the match was correct, and to find out which organization employed the profile owner most recently during \timeperiod{}. ``Apache Software Foundation'' was never recorded as the true employer, because ASF has no employees\cite{asf}.
 
 Once these guesses were generated, a determination of each contributor's employer was made based on the following prioritization:
 \begin{enumerate}
-	\item If the employer name came from LinkedIn, it takes precedence over all other possibilities, because LinkedIn is usually the most up-to-date of the profile, and the current employer is an essential part of this profile.
+	\item If the employer name came from LinkedIn, it takes precedence over all other possibilities, because LinkedIn was usually the most up-to-date of the profiles, and employment history is an essential part of this profile.
 	\item Otherwise, if the contributor's Github profile listed an employer, it was taken.
 	\item If neither LinkedIn nor Github provided an employer guess, it was left for manual inspection.
 \end{enumerate}
