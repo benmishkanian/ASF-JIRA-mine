@@ -54,11 +54,11 @@ A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org an
 \begin{figure}
 	\includegraphics[width=\textwidth]{GHTorrentSchema.png}
 	\centering
-	\caption{The relevant tables of the GHTorrent database \pd{Show foreign keys with asterix, and indicate this in this caption}\bm{Added the asterisks. I opted to explain this syntax in the section introduction instead of the caption, so I would not have to repeat it 3 times.}}
+	\caption{The relevant tables of the GHTorrent database}
 	\label{fig:ghtorrentSchema}
 \end{figure}
 \subsection{CVSAnalY2 Databases}
-\pd{Is it really cvsanaly2? If so use the same name in the same font everywhere}\bm{Yes, the actual executable is cvsanaly2. I fixed it to consistently use the capitalized version seen on their website.} The CVSAnalY2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, CVSAnalY2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
+The CVSAnalY2 tool\cite{cvsanaly} was used to parse each project's Git log data and transform it into a database that could be analyzed more quickly and conveniently. At the time of writing, CVSAnalY2 only supports MySQL databases. One database was created for each project analyzed, with the name \verb|<<project_name>>_git|. The relevant portion of the schema of these databases is shown in figure \ref{fig:cvsanalySchema}.
 \begin{figure}
 	\includegraphics[scale=0.8]{cvsanalySchema.png}
 	\centering
@@ -112,15 +112,13 @@ The script jiradb.py performs the majority of the data gathering. Its algorithm 
 	\item Get JIRA account data for contributors to the JIRAs of the projects (See section \ref{jirasec})
 	\item Get Git account and commit data for committers to the projects (See section \ref{gitsec})
 	\item Get Github account data for Git accounts (See section \ref{githubsec})
-	\item Associate accounts belonging to a single person under a single contributor ID (See section \ref{mergingsec}) \pd{Put forward references to 2.5.4, using ref command} \bmdone{I explain it in 2.5.4} \bm{Done.}
-	\item Generate a guess for the employer of each contributor (See section \ref{employersec}) \pd{Forward references here} \bmdone{I explain it in 2.5.5} \bm{Done.}
+	\item Associate accounts belonging to a single person under a single contributor ID (See section \ref{mergingsec})
+	\item Generate a guess for the employer of each contributor (See section \ref{employersec})
 \end{enumerate}
 
 Each individual set of profile data is stored in a row of the \textbf{contributoraccounts} table of the research database. This table relates individual contributors to the accounts that they used to contribute. The following sections provide more details on the data collection steps.
 
 \subsection{JIRA Data}\label{jirasec}
-\pddone{Use consistent typography for "JIRA"} \bmdone{In this context, jira is the package name, so it has the proper case. Is there a special way to typeset Python package names to make it more clear?}
-\pd{Jira is being used as a noun modifier, here so it's OK to use the same font here as everywhere} \bm{Fixed.}
 The JIRA Python package was used to query the ASF JIRA at \ASFJIRAURL. JIRA can be queried programatically by using the JIRA Query Language (JQL). The following JQL query was used to download issues for project \textbf{P} that were either created or resolved in \timeperiod{}:
 \begin{lstlisting}
 project = "P" AND created < "2016-06-01 00:00" AND (created >

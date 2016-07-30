@@ -122,8 +122,7 @@ The difference between the centralization values computed when using closeness v
 
 \section{Cluster Analysis}\label{clustersection}
 The GN algorithm identified sixteen communities, or clusters, in the organizational network. Since there were forty projects, the relatively low number of clusters suggests that the grouping algorithm is more sophisticated than simply grouping organizations with their main projects. (The average number of projects per organization was 1.95, with a median of 1, so a simple project-based grouping algorithm would likely create too many clusters to be useful\footnote{See table \ref{tab:orgprojects} in appendix \ref{ch:orgdata} for the full data of project count per organization.}.) At the same time, it created enough clusters to prevent the graph from devolving into a few large blobs. (For comparison, the greedy algorithm \textbf{fastgreedy.community} only created five clusters.)
- \pd{The previous sentence needs more details and justification. Add a few sentences explaining why you find that GN is doing something sophisticated}\bm{Hopefully this explains it better. I also weakened the claim a bit.}
-  Still, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters with the projects where most of the cluster's organizations contribute.\pd{Don't end sentences a proposition with :-)}\bm{I see what you did there :) Fixed.}
+Still, project collaborations are what the network is based on, so as a first attempt at understanding these clusters, table \ref{tab:clusterprojects} relates clusters with the projects where most of the cluster's organizations contribute.
 
 \begin{table}
 	\begin{tabular}{l|c}
