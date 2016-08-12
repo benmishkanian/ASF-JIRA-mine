@@ -3,7 +3,9 @@ This chapter details the data collection process for the building blocks of the 
 
 \section{Initial Research Question and Data Collection}
 
-The original intent of this research project was to identify differences in commit behavior between paid and volunteer contributors of open source projects. In order to classify contributors as paid or volunteer, a script was written which collected data from various public online profiles of ASF contributors active in 2015 and used several heuristics to classify individuals as paid or volunteer. 
+This research project originally began with a different goal: the intent was to identify differences in commit behavior between paid and volunteer contributors of open source projects. However, due to challenges in data collection, the project was changed to analyze organizational networks instead. This section provides some context on why this decision was made, and how it shaped the direction of the data collection.
+
+The primary experimental task in the original project was to classify contributors as paid or volunteer so that the differences in commit behavior between these classes could be evaluated. A script was written which collected data from Git, Github, and JIRA profiles of ASF contributors and used several heuristics to perform the classification. 
 However, two issues made it difficult to identify the differences between the two classes:
 \begin{enumerate}
 	\item \label{manypaid} For a given ASF project and time period, the proportion of active contributors who are paid to work on the project can be very high, sometimes nearing 100\%.
@@ -12,7 +14,8 @@ However, two issues made it difficult to identify the differences between the tw
 Issue \#\ref{manypaid} was \emph{prima facie} quite surprising---one might expect there to be a somewhat even mix of paid and volunteer contributors, but upon manually examining contributors to a couple projects, it was discovered that these projects were almost exclusively developed by employees of a few companies during the time period under observation. With such skewed samples, it became difficult to write a classifier sensitive enough to be useful.
 Issue \#\ref{novolunteers} was an unforeseen limitation of using profile information to identify social group affiliation. Ultimately, there was no reliable way to differentiate between a volunteer and a paid contributor when his/her data does not reveal any obvious link between his/her contributions and his/her employer.
 
-Since creating this classifier proved infeasible, the data was re-purposed to do a social network analysis of ASF contributions instead. In particular, the following facets of the existing dataset were useful for this purpose:
+Since creating this classifier proved infeasible, the data was re-purposed to do a social network analysis of ASF contributions instead. 
+The Git, Github, and JIRA data was general enough to be applicable to the new research direction. In particular, the following facets of the existing dataset were useful:
 \begin{itemize}
 	\item For any given contributor, the dataset typically contained data from multiple accounts/profiles, which improved the reliability of finding a given contributor's employer.
 	\item Since the contributor's employer name was necessary for one of the heuristics, a fair amount of employer data was already available.
@@ -48,9 +51,9 @@ In addition, to work around the rate limits of the Github API, the script utiliz
 \pddone{Add a section here between 2.2 and 2.3, entitled "Schema of Mined Data" explaining the schema of all your data, viz., all relations,  including accountprojects} \bmdone{Created section ``Database Schema'', please review.}
 
 \section{Database Schema}
-All the collected data was stored in a set of relational databases. Due to technical limitations in some of the project's external dependencies, multiple different databases were required. The following subsections describe the purpose and schema of each database. In the schema diagrams, foreign keys are denoted with an asterisk.
+All the collected data was stored in a set of relational databases. Due to technical limitations in some of the project's external dependencies (explained below), multiple different databases were required. The following subsections describe the purpose and schema of each database. In the schema diagrams, foreign keys are denoted with an asterisk.
 \subsection{GHTorrent Database}
-A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a ``proxy cache'' for the live Github data, which helped us avoid encountering the Github API rate limit as frequently. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}.
+A MySQL dump of the 2016 GHTorrent database was downloaded from GHTorrent.org and installed locally. This database was used as a ``proxy cache'' for the live Github data, providing unrestricted access to most of the necessary Github data. This resulted in a significant performance improvement, compared to exclusively using the Github API, which has a restrictive rate limit that would have bottlenecked the data collection. The relevant portion of the schema is shown in figure \ref{fig:ghtorrentSchema}.
 \begin{figure}
 	\includegraphics[width=\textwidth]{GHTorrentSchema.png}
 	\centering
@@ -84,12 +87,12 @@ One specific issue with the data collection was that since a contributor's emplo
 However, it was still possible to accurately measure organizational contributions, for the following reason: through experimentation it was found that the vast majority of commits to a project typically came from a small subset of the committers; since these contributors were the most active, it was sufficient to identify only their employers and ignore the others, without damaging the validity of the results. For this reason, the data collection was limited to only the prolific contributors of each project, defined as contributors in the minimum size set S such that the sum of the number of commits done by members of S during \timeperiod{} is at least 80\% of the number of commits done to the project. This also had the effect of improving the proportion of employer names mined automatically, because prolific contributors seem to be more likely to keep their Git, Github, and JIRA profile information up-to-date.
 
 An additional constraint was that only ASF projects which met the following conditions were considered:
-\begin{itemize}
-	\item The project is listed in the GHTorrent database
-	\item The project has a JIRA hosted at \ASFJIRAURL
-	\item At least 20 commits were done to the project within the period under observation
-\end{itemize}
-These constraints resulted in the exclusion of projects which lacked sufficient data to analyze. The final set of projects mined is shown in table \ref{tab:projectcommitcounts}.
+\begin{enumerate}
+	\item \label{ghtreq} The project is listed in the GHTorrent database
+	\item \label{jirareq} The project has a JIRA hosted at \ASFJIRAURL
+	\item \label{commitreq} At least 20 commits were done to the project within the period under observation
+\end{enumerate}
+In general, these constraints resulted in the exclusion of projects which lacked sufficient data to analyze. \#\ref{ghtreq} allowed selection of projects that were hosted on Github. \#\ref{jirareq} ensured each project had a JIRA that could be automatically mined for additional account information. \#\ref{commitreq} excluded projects with few commits, because they would have added noise to the social networks, in the form of highly insignificant edges. The final set of projects mined is shown in table \ref{tab:projectcommitcounts}.
 
 \begin{table}
 	\begin{tabular}{l|c}%
@@ -160,7 +163,7 @@ Once these employer guesses were generated, a determination of each contributor'
 	\item Otherwise, if the contributor's Github profile listed an employer, it was taken.
 	\item If neither LinkedIn nor Github provided an employer guess, it was left for manual inspection.
 \end{enumerate}
-Additionally, any employer name that appeared only once in the dataset was also included in manual verification, based off the intuition that such values were more likely to be incorrect, as opposed to the alternative possibility, which is that the organization assigned only one person to the projects.
-The manual verification uncovered the true employers of all but six of the contributors whose employer name was missing or dubious. Instead of excluding these contributors from further analysis, their employer names were set to \verb|Unknown <Unique_ID>|, effectively classifying them as independent volunteers. Of the 92 contributors with dubious employer name, 42 were found to be incorrect, and subsequently corrected.
+Additionally, any employer name that appeared only once in the dataset was also included in manual verification, based off the intuition that such values were more likely to be incorrect, as opposed to the alternative possibility, which is that the organization assigned only one person to the projects. Errors in employer identification could be caused by mistakes in identity matching, or out-of-date profile information, resulting in such anomalies.
+The manual verification uncovered the true employers of all but six of the contributors whose employer name was missing or appearing once. Instead of excluding these contributors from further analysis, their employer names were set to \verb|Unknown <Unique_ID>|, effectively classifying them as independent volunteers. Of the 92 contributors with employer name appearing once, 42 were found to be incorrect, and subsequently corrected.
 
 In the final step of data cleaning, different spellings and capitalizations of employer names were normalized by manually constructing a mapping table from each variant spelling to the most common spelling (in terms of how many of the contributors used it in their profiles.) The total number of unique organizations in the dataset, including the six unknown ones, was 93. The number of active contributors per organization is listed in table \ref{tab:orgcontributors} of appendix \ref{ch:orgdata}.
