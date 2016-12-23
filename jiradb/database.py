@@ -407,7 +407,7 @@ class JIRADB(object):
                         contributor=self.session.query(Contributor).filter(Contributor.id == contributorId).one(),
                         company=None)
                 if contributorCompany.company is None:
-                    contributorCompany.company = getLikelyLinkedInEmployer(contributorId)
+                    contributorCompany.company = getLikelyLinkedInEmployer(self, contributorId)
                     self.session.add(contributorCompany)
             self.session.commit()
 
@@ -432,7 +432,7 @@ class JIRADB(object):
             missedContributorIds = []
             for account in topContributorAccounts:
                 accountCommits = account.BHCommitCount + account.NonBHCommitCount
-                companyAttribution = getLikelyLinkedInEmployer(account.Contributor.id)
+                companyAttribution = getLikelyLinkedInEmployer(self, account.Contributor.id)
                 if companyAttribution is not None and companyAttribution != '':
                     # create company-project edge if not exists
                     edge = self.session.query(CompanyProjectEdge).filter(
@@ -631,7 +631,7 @@ class JIRADB(object):
             # Verify that there are enough commits
             if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > self.startDate.strftime(CVSANALY_TIME_FORMAT),
                                                      gitDB.log.c.author_date < self.endDate.strftime(CVSANALY_TIME_FORMAT)).count() < MIN_COMMITS:
-                log.warn('Project %s had less than %s commits in the given time window and will be excluded', project, MIN_COMMITS)
+                log.warning('Project %s had less than %s commits in the given time window and will be excluded', project, MIN_COMMITS)
                 excludedProjects.append(project)
                 continue
 
@@ -762,7 +762,7 @@ class JIRADB(object):
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
         if len(contributorEmail) > 64:
-            log.warn("Truncating the following email to 64 characters: %s", contributorEmail)
+            log.warning("Truncating the following email to 64 characters: %s", contributorEmail)
             contributorEmail = contributorEmail[:64]
         # Find out if there is a contributor with an account that has the same email or (the same username on the same service)
         if contributorEmail == 'dev-null@apache.org':
@@ -934,7 +934,7 @@ class JIRADB(object):
                         else:
                             usingPersonalEmail = None
             else:
-                log.warn('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
+                log.warning('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
                 usingPersonalEmail = None
 
             log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
@@ -1115,9 +1115,6 @@ class JIRADB(object):
 
     def getContributors(self):
         return self.session.query(Contributor)
-
-    def getVolunteers(self):
-        self.getContributors().filter_by(hasCommercialEmail=True)
 
     def getAccountProjectRows(self, project):
         return self.session.query(ContributorAccount).join(AccountProject).filter(AccountProject.project == project)
