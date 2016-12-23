@@ -17,12 +17,12 @@ from github3.null import NullObject
 from jira import JIRA
 from jira.exceptions import JIRAError
 from requests.exceptions import ConnectionError
-from sqlalchemy import create_engine, Table, MetaData, asc, desc, \
-    func
+from sqlalchemy import create_engine, Table, MetaData, asc, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
 
+from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
 
@@ -184,7 +184,6 @@ class JIRADB(object):
         self.gkeyfile = gkeyfile
         self.ghtoken = ghtoken
         self.ghusersextendeddbstring = ghusersextendeddbstring
-        self.ghtorrentdbstring = ghtorrentdbstring
         self.ghscanlimit = ghscanlimit
         self.gitdbuser = gitdbuser
         self.gitdbpass = gitdbpass
@@ -204,10 +203,10 @@ class JIRADB(object):
             AccountProject.project).all())
 
         # DB connection for ghtorrent
-        ghtorrentengine = create_engine(self.ghtorrentdbstring)
+        ghtorrentengine = create_engine(ghtorrentdbstring)
         GHTorrentSession = sessionmaker(bind=ghtorrentengine)
         self.ghtorrentsession = GHTorrentSession()
-        ghtTable = TableReflector(ghtorrentengine, SCHEMA_REGEX.search(self.ghtorrentdbstring).group(1))
+        ghtTable = TableReflector(ghtorrentengine, SCHEMA_REGEX.search(ghtorrentdbstring).group(1))
         self.ghtorrentprojects = ghtTable('projects')
         self.ghtorrentusers = ghtTable('users')
         self.ghtorrentorganization_members = ghtTable('organization_members')
@@ -249,7 +248,7 @@ class JIRADB(object):
 
     def buildContributorCompanyTable(self, projects, requiredCommitCoverage):
         for project in projects:
-            topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+            topContributorIds = getTopContributors(self.session, project, requiredCommitCoverage)
             for contributorId in topContributorIds:
                 # get row if not exists
                 contributorCompany = self.session.query(ContributorCompany).filter(
@@ -274,7 +273,7 @@ class JIRADB(object):
         for project in projects:
             # delete prior data
             self.deleteRows(CompanyProjectEdge, func.lower(CompanyProjectEdge.project) == func.lower(project))
-            topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+            topContributorIds = getTopContributors(self.session, project, requiredCommitCoverage)
             # get AccountProjects of these contributors for this project
             topContributorAccounts = self.session.query(Contributor, AccountProject.BHCommitCount,
                                                         AccountProject.NonBHCommitCount).join(ContributorAccount).join(
@@ -328,65 +327,12 @@ class JIRADB(object):
         return missedCommitsDict
 
     def updateTopContributorEmployers(self, project: str, requiredCommitCoverage: float, delayBetweenQueries: int):
-        topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
+        topContributorIds = getTopContributors(self.session, project, requiredCommitCoverage)
         topContributorAccounts = self.session.query(Contributor).join(ContributorAccount).filter(
             Contributor.id.in_(topContributorIds))
         for account in topContributorAccounts:
             self.getLinkedInEmployer(account.displayName, project)
             time.sleep(delayBetweenQueries)
-
-    def getImportantAccounts(self, project, requiredCommitCoverage):
-        """
-        Returns the display names of accounts of top contributors for the given project.
-
-        :param project: name of the project
-        :param requiredCommitCoverage: percentage of commit
-        :return:
-        """
-        topContributorIds = self.getTopContributors(project, requiredCommitCoverage)
-        # get accounts of these contributors
-        return self.session.query(ContributorAccount.displayName).filter(
-            ContributorAccount.contributors_id.in_(topContributorIds))
-
-    def getTopContributors(self, project: str, requiredCommitCoverage: float):
-        """
-        Make a list of the top contributors for this project in terms of commit count. We keep appending contributors
-        until at least requiredCommitCoverage percent of the commits are covered by a contributor in the list.
-
-        :param project: name of the project
-        :param requiredCommitCoverage: percentage of commits in project that must have been authored by a contributor in the list
-        :return: a minimal list of the top contributors
-        """
-        assert 0 <= requiredCommitCoverage <= 1
-        requiredCommitCount = requiredCommitCoverage * self.session.query(func.sum(EmailProjectCommitCount.commitcount)).filter(EmailProjectCommitCount.project == project).first()[0]
-        coveredCommitCount = 0
-        topContributors = []
-        # Get the list of contributors, ordered by commit count, ascending
-        subq = self.session.query(Contributor.id, ContributorAccount.email, EmailProjectCommitCount.commitcount).join(
-            ContributorAccount).join(EmailProjectCommitCount,
-                                     EmailProjectCommitCount.email == ContributorAccount.email).filter(EmailProjectCommitCount.project == project).distinct().subquery()
-        subq2 = self.session.query(subq.c.id, func.sum(subq.c.commitcount).label('commitcount')).group_by(subq.c.id).subquery()
-        contributorCommits = self.session.query(subq2).order_by(asc('commitcount')).all()
-        # Append to topContributors until we have sufficient commit coverage
-        while coveredCommitCount < requiredCommitCount:
-            contributorCommitTuple = contributorCommits.pop()
-            topContributors.append(contributorCommitTuple[0])
-            coveredCommitCount = coveredCommitCount + contributorCommitTuple[1]
-        log.info('%d contributors authored at least %f fraction of the commits in %s', len(topContributors), requiredCommitCoverage, project)
-        return topContributors
-
-    def getTopContributorCount(self, projects, requiredProjectCommitCoverage):
-        """
-        Get the minimum number of contributors required to provide commit coverage over all projects.
-
-        :param projects: the projects to cover
-        :param requiredProjectCommitCoverage: fraction of commits in each project that must be covered
-        :return: the number of contributors required
-        """
-        requiredContributorCount = 0
-        for project in projects:
-            requiredContributorCount = requiredContributorCount + len(self.getTopContributors(project, requiredProjectCommitCoverage))
-        return requiredContributorCount
 
     def searchGithubUsers(self, query):
         self.waitForRateLimit('search')
@@ -907,18 +853,6 @@ class JIRADB(object):
 
         return accountProject
 
-    def getProjectCompaniesByCommits(self, project):
-        """
-        Gets (organization, commitcount) for this project, ordered by commitcount descending. Organizations are obtained
-        from AccountProject.LinkedInEmployer.
-        :param project: The project for which commitcounts should be aggregated
-        :return: Organizations ranked by commit count for this project
-        """
-        companiesByCommitsSubquery = self.session.query(AccountProject.LinkedInEmployer, func.sum(
-            AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).filter(
-            AccountProject.project == project).group_by(AccountProject.LinkedInEmployer).subquery()
-        return self.session.query(companiesByCommitsSubquery).order_by(desc('commitcount'))
-
     def getLinkedInEmployer(self, displayName, project):
         # Try to get LinkedIn information from the Google cache
         gCacheRow = self.session.query(GoogleCache).filter(GoogleCache.displayName == displayName,
@@ -964,12 +898,6 @@ class JIRADB(object):
                          displayName,
                          project, e)
         return None if gCacheRow is None else gCacheRow.currentEmployer
-
-    def getContributors(self):
-        return self.session.query(Contributor)
-
-    def getAccountProjectRows(self, project):
-        return self.session.query(ContributorAccount).join(AccountProject).filter(AccountProject.project == project)
 
     def persistOrganizations(self, contributor):
         # get fresh github user object

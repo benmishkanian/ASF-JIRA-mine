@@ -2,6 +2,20 @@ from .database import Contributor, AccountProject, ContributorAccount, log
 from sqlalchemy import func, desc
 
 
+def getProjectCompaniesByCommits(session, project):
+    """
+    Gets (organization, commitcount) for this project, ordered by commitcount descending. Organizations are obtained
+    from AccountProject.LinkedInEmployer.
+    :param session: The JIRADB session to query
+    :param project: The project for which commitcounts should be aggregated
+    :return: Organizations ranked by commit count for this project
+    """
+    companiesByCommitsSubquery = session.query(AccountProject.LinkedInEmployer, func.sum(
+        AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).filter(
+        AccountProject.project == project).group_by(AccountProject.LinkedInEmployer).subquery()
+    return session.query(companiesByCommitsSubquery).order_by(desc('commitcount'))
+
+
 def getLikelyLinkedInEmployer(jiradb, contributorId):
     """
     Gets a list of possible employers for the contributor based off of the employer of each of their accounts.
@@ -33,7 +47,7 @@ def getLikelyLinkedInEmployer(jiradb, contributorId):
     else:
         raise RuntimeError('contributor {} has no projects'.format(contributorId))
     log.info('contributor # %s contributed to project(s): %s', contributorId, projects)
-    companyRankings = jiradb.getProjectCompaniesByCommits(mainProject)
+    companyRankings = getProjectCompaniesByCommits(jiradb.session, mainProject)
     for companyRanking in companyRankings:
         if companyRanking.LinkedInEmployer in possibleEmployers:
             return companyRanking.LinkedInEmployer

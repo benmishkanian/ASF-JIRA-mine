@@ -3,7 +3,7 @@ from enum import Enum
 
 import pylab as P
 
-from jiradb.database import JIRADB, getArguments
+from jiradb.database import JIRADB, getArguments, Contributor
 
 
 class ContributionType(Enum):
@@ -66,7 +66,7 @@ if not args.cached:
     print("Done")
 
 # Write list of domain names of contributors to domains.txt
-contributors = jiradb.getContributors()
+contributors = jiradb.session.query(Contributor)
 getDomains([contributor.email for contributor in contributors])
 
 for project in args.projects:
