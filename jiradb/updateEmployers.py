@@ -1,4 +1,4 @@
-from jiradb import *
+from jiradb.database import *
 
 
 def waitForSearchQuota(jiradb):

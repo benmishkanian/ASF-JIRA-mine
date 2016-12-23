@@ -1,4 +1,4 @@
-from jiradb import *
+from jiradb.database import *
 
 if __name__ == "__main__":
     log.setLevel(logging.DEBUG)
