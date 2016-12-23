@@ -24,6 +24,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, aliased
 from sqlalchemy.orm import sessionmaker
 
+from jiradb.employer import getLikelyLinkedInEmployer
+
 GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
 
 DATE_FORMAT = '%Y-%m-%d'
@@ -405,7 +407,7 @@ class JIRADB(object):
                         contributor=self.session.query(Contributor).filter(Contributor.id == contributorId).one(),
                         company=None)
                 if contributorCompany.company is None:
-                    contributorCompany.company = self.getLikelyLinkedInEmployer(contributorId)
+                    contributorCompany.company = getLikelyLinkedInEmployer(contributorId)
                     self.session.add(contributorCompany)
             self.session.commit()
 
@@ -430,7 +432,7 @@ class JIRADB(object):
             missedContributorIds = []
             for account in topContributorAccounts:
                 accountCommits = account.BHCommitCount + account.NonBHCommitCount
-                companyAttribution = self.getLikelyLinkedInEmployer(account.Contributor.id)
+                companyAttribution = getLikelyLinkedInEmployer(account.Contributor.id)
                 if companyAttribution is not None and companyAttribution != '':
                     # create company-project edge if not exists
                     edge = self.session.query(CompanyProjectEdge).filter(
@@ -1064,43 +1066,6 @@ class JIRADB(object):
             AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).filter(
             AccountProject.project == project).group_by(AccountProject.LinkedInEmployer).subquery()
         return self.session.query(companiesByCommitsSubquery).order_by(desc('commitcount'))
-
-    def getLikelyLinkedInEmployer(self, contributorId):
-        """
-        Gets a list of possible employers for the contributor based off of the employer of each of their accounts.
-        :param contributorId:
-        :return:
-        """
-        accountProjectRows = self.session.query(Contributor, AccountProject.LinkedInEmployer,
-                                                AccountProject.project).join(ContributorAccount).join(
-            AccountProject).filter(Contributor.id == contributorId)
-        possibleEmployers = []
-        projects = []
-        for accountProjectRow in accountProjectRows:
-            if accountProjectRow.LinkedInEmployer not in possibleEmployers:
-                possibleEmployers.append(accountProjectRow.LinkedInEmployer)
-            if accountProjectRow.project not in projects:
-                projects.append(accountProjectRow.project)
-        if len(projects) == 1:
-            mainProject = projects[0]
-        elif len(projects) > 1:
-            # The main project is the one this person did the most commits to
-            countSubq = self.session.query(AccountProject.project, func.sum(
-                AccountProject.BHCommitCount + AccountProject.NonBHCommitCount).label('commitcount')).join(
-                ContributorAccount).join(Contributor).filter(Contributor.id == contributorId).group_by(
-                AccountProject.project).subquery()
-            mainRow = self.session.query(countSubq).order_by(desc('commitcount')).first()
-            assert mainRow is not None, 'Found 0 projects for contributor ' + contributorId
-            mainProject = mainRow.project
-        else:
-            raise RuntimeError('contributor {} has no projects'.format(contributorId))
-        log.info('contributor # %s contributed to project(s): %s', contributorId, projects)
-        companyRankings = self.getProjectCompaniesByCommits(mainProject)
-        for companyRanking in companyRankings:
-            if companyRanking.LinkedInEmployer in possibleEmployers:
-                return companyRanking.LinkedInEmployer
-        log.warning('%s has uncommon employer; taking first of: %s', contributorId, possibleEmployers)
-        return possibleEmployers[0]
 
     def getLinkedInEmployer(self, displayName, project):
         # Try to get LinkedIn information from the Google cache

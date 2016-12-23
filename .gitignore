@@ -11,4 +11,4 @@ googlesearchkey.txt
 *.log
 README.html
 *.db
-__pycache__/*
+*.pyc
