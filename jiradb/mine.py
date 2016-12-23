@@ -3,7 +3,7 @@ from enum import Enum
 
 import pylab as P
 
-from jiradb import JIRADB, getArguments
+from jiradb.database import JIRADB, getArguments
 
 
 class ContributionType(Enum):
@@ -59,7 +59,7 @@ def drawContributionHistogram(project, contributionType, isVolunteer):
 
 args = getArguments()
 
-jiradb = JIRADB(dbstring=args.dbstring)
+jiradb = JIRADB(dbstring=args['dbstring'])
 if not args.cached:
     print("Refreshing JIRA database...", end='', flush=True)
     jiradb.persistIssues(args.projects)
