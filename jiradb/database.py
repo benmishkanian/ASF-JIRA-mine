@@ -921,25 +921,3 @@ class JIRADB(object):
                     self.session.add(ContributorOrganization(
                         contributor=contributor, githuborganization=githubOrganization
                     ))
-
-if __name__ == "__main__":
-    log.setLevel(logging.DEBUG)
-    # Add console log handler
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter('%(message)s'))
-    log.addHandler(ch)
-    # Add file log handler
-    fh = logging.FileHandler('jiradb.log')
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
-    log.addHandler(fh)
-    # Add error file log handler
-    efh = logging.FileHandler('errors.log')
-    efh.setLevel(logging.ERROR)
-    efh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
-    log.addHandler(efh)
-
-    args = getArguments()
-    jiradb = JIRADB(**args)
-    jiradb.persistIssues(args['projects'])
