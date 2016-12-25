@@ -1,5 +1,9 @@
-from .database import Contributor, AccountProject, ContributorAccount, log
+import logging
+
+from .schema import Contributor, AccountProject, ContributorAccount
 from sqlalchemy import func, desc
+
+log = logging.getLogger(__name__)
 
 
 def getProjectCompaniesByCommits(session, project):

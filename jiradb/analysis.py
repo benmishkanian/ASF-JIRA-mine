@@ -1,7 +1,9 @@
 from sqlalchemy import func, asc
 
-from jiradb.database import log
+import logging
 from jiradb.schema import EmailProjectCommitCount, Contributor, ContributorAccount
+
+log = logging.getLogger(__name__)
 
 
 def getTopContributorCount(jiradb, projects, requiredProjectCommitCoverage):

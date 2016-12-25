@@ -114,9 +114,10 @@ class WhoisError(Enum):
 
 def TableReflector(engine, schema):
     metadata = MetaData(engine)
-    def reflectTable(tableName):
+
+    def reflectTable(tableName, includedColumns=None):
         nonlocal engine, metadata, schema
-        return Table(tableName, metadata, autoload_with=engine, schema=schema)
+        return Table(tableName, metadata, autoload_with=engine, schema=schema, include_columns=includedColumns)
     return reflectTable
 
 
@@ -207,11 +208,15 @@ class JIRADB(object):
         GHTorrentSession = sessionmaker(bind=ghtorrentengine)
         self.ghtorrentsession = GHTorrentSession()
         ghtTable = TableReflector(ghtorrentengine, SCHEMA_REGEX.search(ghtorrentdbstring).group(1))
-        self.ghtorrentprojects = ghtTable('projects')
-        self.ghtorrentusers = ghtTable('users')
+        # TODO: GHTorrent.org blocks SHOW CREATE TABLE, requiring workaround
+        self.ghtorrentusers = ghtTable('users', includedColumns=['id'])
+        self.ghtorrentprojects = ghtTable('projects', includedColumns=['id', 'url', 'name', 'description', 'language', 'created_at', 'deleted', 'updated_at'])
         self.ghtorrentorganization_members = ghtTable('organization_members')
         self.ghtorrentproject_commits = ghtTable('project_commits')
         self.ghtorrentcommits = ghtTable('commits')
+        # TODO: experimental reflection method, may be cleaner code
+        # ghtMetadata = MetaData(ghtorrentengine)
+        # ghtMetadata.reflect(only=['projects', 'project_commits'])
 
         self.startDate = pytz.utc.localize(
             datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
