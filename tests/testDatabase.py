@@ -2,6 +2,7 @@ import unittest
 
 from jiradb.database import JIRADB
 from jiradb.schema import Issue
+from examples.logUtil import configureLogger
 
 
 class TestDatabase(unittest.TestCase):
@@ -15,3 +16,7 @@ class TestDatabase(unittest.TestCase):
     def test_persistIssues(self):
         self.jiradb.persistIssues([self.PROJECT_NAME])
         self.assertTrue(self.jiradb.session.query(Issue).count() != 0)
+
+if __name__ == '__main__':
+    configureLogger("testDatabase")
+    unittest.main()
