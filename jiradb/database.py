@@ -26,7 +26,7 @@ from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
 
-GHUSERS_EXTENDED_TABLE = 'ghusers_extended'
+EMAIL_GH_LOGIN_TABLE_NAME = 'ghusers_extended'
 
 DATE_FORMAT = '%Y-%m-%d'
 JIRA_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
@@ -150,14 +150,14 @@ class GitDB(object):
 
 class JIRADB(object):
     # noinspection PyUnusedLocal
-    def __init__(self, ghusersextendeddbstring, ghtorrentdbstring, gitdbpass, ghtoken=None,
+    def __init__(self, emailGHLoginDBName, ghtorrentdbstring, gitdbpass, ghtoken=None,
                  dbstring='sqlite:///sqlite.db', gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None,
                  gitdbuser=getpass.getuser(), gitdbhostname='localhost', **unusedKwargs):
         """Initializes database connections/resources, and creates the necessary tables if they do not already exist."""
         self.dbstring = dbstring
         self.gkeyfile = gkeyfile
         self.ghtoken = ghtoken
-        self.ghusersextendeddbstring = ghusersextendeddbstring
+        self.emailGHLoginDBName = emailGHLoginDBName
         self.ghscanlimit = ghscanlimit
         self.gitdbuser = gitdbuser
         self.gitdbpass = gitdbpass
@@ -207,11 +207,11 @@ class JIRADB(object):
                 ciphertext = gkeyfilereader.read()
             searchService = build('customsearch', 'v1', developerKey=decrypt(gpass, ciphertext))
             self.customSearch = searchService.cse()
-        if self.ghusersextendeddbstring is not None:
-            # Reflect Github account data table
-            ghusersextendeddbengine = create_engine(self.ghusersextendeddbstring)
-            self.ghusersextended = Table(GHUSERS_EXTENDED_TABLE, MetaData(ghusersextendeddbengine),
-                                         autoload_with=ghusersextendeddbengine)
+        if self.emailGHLoginDBName is not None:
+            # Reflect table relating email to Github username
+            ghusersextendeddbengine = create_engine(self.emailGHLoginDBName)
+            self.emailGHLoginTable = Table(EMAIL_GH_LOGIN_TABLE_NAME, MetaData(ghusersextendeddbengine),
+                                           autoload_with=ghusersextendeddbengine)
             GHUsersExtendedSession = sessionmaker(bind=ghusersextendeddbengine)
             self.ghusersextendedsession = GHUsersExtendedSession()
 
@@ -566,10 +566,10 @@ class JIRADB(object):
 
             # Try to get information from Github profile
             ghMatchedUser = None
-            if self.ghusersextendeddbstring is not None:
+            if self.emailGHLoginDBName is not None:
                 # Attempt to use offline GHTorrent db for a quick Github username match
-                rows = self.ghusersextendedsession.query(self.ghusersextended).filter(
-                    self.ghusersextended.c.email == contributorEmail)
+                rows = self.ghusersextendedsession.query(self.emailGHLoginTable).filter(
+                    self.emailGHLoginTable.c.email == contributorEmail)
                 for ghAccount in rows:
                     try:
                         potentialUser = self.gh.user(ghAccount.login)

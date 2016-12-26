@@ -1,6 +1,6 @@
 import getpass
 
-from jiradb.database import GHUSERS_EXTENDED_TABLE
+from jiradb.database import EMAIL_GH_LOGIN_TABLE_NAME
 
 
 def getArguments():
@@ -13,8 +13,8 @@ def getArguments():
     parser.add_argument('--gkeyfile', action='store',
                         help='File that contains a Google Custom Search API key enciphered by simple-crypt. If not specified, a cache of search results will be used instead.')
     parser.add_argument('--ghtoken', help='A github authentication token')
-    parser.add_argument('--ghusersextendeddbstring', action='store',
-                        help='DB connection string for database containing the dump of users_data_aggregated_gender.csv as table ' + GHUSERS_EXTENDED_TABLE)
+    parser.add_argument('--emailGHLoginDBName', action='store',
+                        help='DB connection string for database containing a table named ' + EMAIL_GH_LOGIN_TABLE_NAME + ' that relates email addresses to Github usernames using column names "email" and "login". It improves performance by reducing usage of the Github API.')
     parser.add_argument('--ghtorrentdbstring', action='store',
                         help='The connection string for a ghtorrent database', required=True)
     parser.add_argument('--ghscanlimit', type=int, default=10, action='store',
