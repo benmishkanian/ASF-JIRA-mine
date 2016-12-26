@@ -1,3 +1,4 @@
+from examples.argumentParser import getArguments
 from examples.logUtil import configureLogger
 from jiradb.analysis import getImportantAccounts
 from jiradb.database import *

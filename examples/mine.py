@@ -3,7 +3,8 @@ from enum import Enum
 
 import pylab as P
 
-from jiradb.database import JIRADB, getArguments, Contributor
+from jiradb.database import JIRADB, Contributor
+from examples.argumentParser import getArguments
 
 
 class ContributionType(Enum):
