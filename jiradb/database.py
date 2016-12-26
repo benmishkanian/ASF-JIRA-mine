@@ -22,6 +22,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
 
+from ._internal_utils import equalsIgnoreCase
 from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
@@ -57,14 +58,6 @@ WHOIS_OBFUSCATORS = ["domainnameproxyservice.com", "whoisproxy.org", "1and1-priv
                      "YinSiBaoHu.AliYun.com", "protecteddomainservices.com"]
 
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
-
-
-def equalsIgnoreCase(s1, s2):
-    if s1 is None:
-        return s2 is None
-    if s2 is None:
-        return s1 is None
-    return s1.lower() == s2.lower()
 
 
 class MockPerson(object):
