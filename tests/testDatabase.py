@@ -8,7 +8,9 @@ class TestDatabase(unittest.TestCase):
     PROJECT_NAME = 'helix'
 
     def setUp(self):
-        self.jiradb = JIRADB()
+        # TODO: requires SSH tunnel to MySQL at ghtorrent.org; this dependency should be mocked and injected
+        # TODO: same issue for csvanaly database dependency
+        self.jiradb = JIRADB("mysql+mysqlconnector://ght:@127.0.0.1/ghtorrent", None, None)
 
     def test_persistIssues(self):
         self.jiradb.persistIssues([self.PROJECT_NAME])

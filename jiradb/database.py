@@ -150,10 +150,15 @@ class GitDB(object):
 
 class JIRADB(object):
     # noinspection PyUnusedLocal
-    def __init__(self, emailGHLoginDBName, ghtorrentdbstring, gitdbpass, ghtoken=None,
+    def __init__(self, ghtorrentdbstring, gitdbuser, gitdbpass, emailGHLoginDBName=None, ghtoken=None,
                  dbstring='sqlite:///sqlite.db', gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None,
-                 gitdbuser=getpass.getuser(), gitdbhostname='localhost', **unusedKwargs):
-        """Initializes database connections/resources, and creates the necessary tables if they do not already exist."""
+                 gitdbhostname='localhost', **unusedKwargs):
+        """
+        Initializes database connections/resources, and creates the necessary tables if they do not already exist.
+
+        :param gitdbuser: the username for a DBMS account that has access to cvsanaly databases (if None, shows interactive prompt)
+        :param gitdbpass: the password for gitdbuser (if None, shows interactive prompt)
+        """
         self.dbstring = dbstring
         self.gkeyfile = gkeyfile
         self.ghtoken = ghtoken
@@ -221,6 +226,9 @@ class JIRADB(object):
         else:
             log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
+        # Show interactive prompt(s) if credentials for git database are not provided
+        if self.gitdbuser is None:
+            self.gitdbuser = getpass.getuser()
         if self.gitdbpass is None:
             self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
 
