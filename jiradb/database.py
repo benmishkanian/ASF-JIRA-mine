@@ -150,9 +150,9 @@ class GitDB(object):
 
 class JIRADB(object):
     # noinspection PyUnusedLocal
-    def __init__(self, ghtoken, ghusersextendeddbstring, ghtorrentdbstring, gitdbpass, dbstring='sqlite:///sqlite.db',
-                 gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None, gitdbuser=getpass.getuser(),
-                 gitdbhostname='localhost', **unusedKwargs):
+    def __init__(self, ghusersextendeddbstring, ghtorrentdbstring, gitdbpass, ghtoken=None,
+                 dbstring='sqlite:///sqlite.db', gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None,
+                 gitdbuser=getpass.getuser(), gitdbhostname='localhost', **unusedKwargs):
         """Initializes database connections/resources, and creates the necessary tables if they do not already exist."""
         self.dbstring = dbstring
         self.gkeyfile = gkeyfile
