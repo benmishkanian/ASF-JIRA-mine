@@ -26,6 +26,7 @@ from ._internal_utils import equalsIgnoreCase
 from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
+import mysql.connector
 
 EMAIL_GH_LOGIN_TABLE_NAME = 'ghusers_extended'
 
@@ -337,37 +338,32 @@ class JIRADB(object):
         excludedProjects = []
         for project in projectList:
             # Find out when the apache project repo was created
-            projectRepo = self.ghtorrentsession.query(
-                self.ghtorrentprojects.c.created_at.label('project_creation_date')).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).filter(
-                self.ghtorrentusers.c.login == 'apache',
-                self.ghtorrentprojects.c.name == project).first()
-            if projectRepo is None:
+            cursor = self.ghtorrentcursor.cursor()
+            cursor.execute("SELECT projects.created_at FROM projects INNER JOIN users ON projects.owner_id = users.id WHERE users.login = 'apache' AND projects.name = '" + project + "'")
+            rows = [r for r in cursor]
+            if len(rows) == 0:
                 log.error('Failed to find any Apache repos for project %s', project)
                 excludedProjects.append(project)
                 continue
             else:
-                apacheProjectCreationDate = projectRepo.project_creation_date
+                apacheProjectCreationDate = rows[0][0]
 
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
-            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
-                self.ghtorrentusers.c.login, self.ghtorrentusers.c.name.label('company_name'),
-                self.ghtorrentusers.c.email).filter(self.ghtorrentusers.c.type == 'ORG',
-                                                    self.ghtorrentprojects.c.name == project,
-                                                    self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
-                asc(self.ghtorrentprojects.c.created_at))
-            if rows.count() == 0:
+            cursor.execute("SELECT email, login, company_name FROM projects INNER JOIN users ON projects.owner_id = users.id WHERE users.type = 'ORG' AND projects.name = '" + project + "' AND projects.created_at < %s ORDER BY projects.created_at ASC", (apacheProjectCreationDate,))
+            rows = [r for r in cursor]
+            if len(rows) == 0:
                 log.error('Failed to find any pre-Apache repos for project %s', project)
                 excludedProjects.append(project)
                 continue
-            for row in rows:
+            for (email, login, company_name) in rows:
                 # Store Company if not seen
-                if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
+                if self.session.query(Company).filter(Company.ghlogin == login).count() == 0:
                     companyDomain = None
-                    if row.email is not None:
-                        companyDomainMatch = EMAIL_DOMAIN_REGEX.search(row.email)
+                    if email is not None:
+                        companyDomainMatch = EMAIL_DOMAIN_REGEX.search(email)
                         if companyDomainMatch is not None:
                             companyDomain = companyDomainMatch.group(1)
-                    newCompany = Company(ghlogin=row.login, name=row.company_name, domain=companyDomain)
+                    newCompany = Company(ghlogin=login, name=company_name, domain=companyDomain)
                     self.session.add(newCompany)
                     newCompanyProject = CompanyProject(company=newCompany, project=project)
                     self.session.add(newCompanyProject)
