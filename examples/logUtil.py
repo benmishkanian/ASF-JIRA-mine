@@ -2,7 +2,7 @@ import logging
 
 
 def configureLogger(filePrefix):
-    log = logging.getLogger('jiradb')
+    log = logging.getLogger("jiradb")
     log.setLevel(logging.DEBUG)
     # Add console log handler
     ch = logging.StreamHandler()

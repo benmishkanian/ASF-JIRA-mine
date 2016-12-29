@@ -11,8 +11,7 @@ class TestDatabase(unittest.TestCase):
     def setUp(self):
         # TODO: requires SSH tunnel to MySQL at ghtorrent.org; this dependency should be mocked and injected
         # TODO: same issue for csvanaly database dependency
-        # Assumes cvsanaly database is on localhost and has no username or password
-        self.jiradb = JIRADB("mysql+mysqlconnector://ght:@127.0.0.1:3307/ghtorrent", '', '')
+        self.jiradb = JIRADB("mysql+mysqlconnector://ght:@127.0.0.1/ghtorrent", None, None)
 
     def test_persistIssues(self):
         self.jiradb.persistIssues([self.PROJECT_NAME])
