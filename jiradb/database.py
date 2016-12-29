@@ -17,14 +17,14 @@ from github3.null import NullObject
 from jira import JIRA
 from jira.exceptions import JIRAError
 from requests.exceptions import ConnectionError
-from sqlalchemy import create_engine, Table, MetaData, asc, func
+from sqlalchemy import MetaData, Table, Column, Integer, VARCHAR, create_engine, asc, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
 
-from ._internal_utils import equalsIgnoreCase
 from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
+from ._internal_utils import equalsIgnoreCase
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
 
 EMAIL_GH_LOGIN_TABLE_NAME = 'ghusers_extended'
@@ -78,8 +78,9 @@ class WhoisError(Enum):
     UNKNOWN_ERR = 5
 
 
-def TableReflector(engine, schema):
-    metadata = MetaData(engine)
+def TableReflector(engine, schema, metadata=None):
+    if metadata is None:
+        metadata = MetaData(engine)
 
     def reflectTable(tableName, includedColumns=None):
         nonlocal engine, metadata, schema
@@ -178,16 +179,19 @@ class JIRADB(object):
         ghtorrentengine = create_engine(ghtorrentdbstring)
         GHTorrentSession = sessionmaker(bind=ghtorrentengine)
         self.ghtorrentsession = GHTorrentSession()
-        ghtTable = TableReflector(ghtorrentengine, SCHEMA_REGEX.search(ghtorrentdbstring).group(1))
+        ghtorrentmetadata = MetaData(ghtorrentengine)
+        ghtorrentschema = SCHEMA_REGEX.search(ghtorrentdbstring).group(1)
+        ghtTable = TableReflector(ghtorrentengine, ghtorrentschema, ghtorrentmetadata)
         # TODO: GHTorrent.org blocks SHOW CREATE TABLE, requiring workaround
-        self.ghtorrentusers = ghtTable('users', includedColumns=['id'])
-        self.ghtorrentprojects = ghtTable('projects', includedColumns=['id', 'url', 'name', 'description', 'language', 'created_at', 'deleted', 'updated_at'])
+        self.ghtorrentusers = self.users = Table('users', ghtorrentmetadata,
+                                                 Column('id', Integer, primary_key=True),
+                                                 Column('login', VARCHAR(255)),
+                                                 Column('name', VARCHAR(255)),
+                                                 schema=ghtorrentschema)
+        self.ghtorrentprojects = ghtTable('projects')
         self.ghtorrentorganization_members = ghtTable('organization_members')
         self.ghtorrentproject_commits = ghtTable('project_commits')
         self.ghtorrentcommits = ghtTable('commits')
-        # TODO: experimental reflection method, may be cleaner code
-        # ghtMetadata = MetaData(ghtorrentengine)
-        # ghtMetadata.reflect(only=['projects', 'project_commits'])
 
         self.startDate = pytz.utc.localize(
             datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
