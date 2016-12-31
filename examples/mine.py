@@ -63,7 +63,7 @@ args = getArguments()
 jiradb = JIRADB(dbstring=args['dbstring'])
 if not args.cached:
     print("Refreshing JIRA database...", end='', flush=True)
-    jiradb.persistIssues(args.projects)
+    jiradb.persistIssues(args.projects, args.startdate, args.enddate)
     print("Done")
 
 # Write list of domain names of contributors to domains.txt

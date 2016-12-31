@@ -145,7 +145,7 @@ class GitDB(object):
 class JIRADB(object):
     # noinspection PyUnusedLocal
     def __init__(self, ghtorrentdbstring, gitdbuser, gitdbpass, emailGHLoginDBName=None, ghtoken=None,
-                 dbstring='sqlite:///sqlite.db', gkeyfile=None, ghscanlimit=10, startdate=None, enddate=None,
+                 dbstring='sqlite:///sqlite.db', gkeyfile=None, ghscanlimit=10,
                  gitdbhostname='localhost', **unusedKwargs):
         """
         Initializes database connections/resources, and creates the necessary tables if they do not already exist.
@@ -192,11 +192,6 @@ class JIRADB(object):
         self.ghtorrentorganization_members = ghtTable('organization_members')
         self.ghtorrentproject_commits = ghtTable('project_commits')
         self.ghtorrentcommits = ghtTable('commits')
-
-        self.startDate = pytz.utc.localize(
-            datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
-        self.endDate = pytz.utc.localize(
-            datetime(MAXYEAR, 1, 1) if enddate is None else datetime.strptime(enddate, DATE_FORMAT))
 
         self.googleSearchEnabled = False
         if self.gkeyfile is not None:
@@ -336,8 +331,12 @@ class JIRADB(object):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
 
-    def persistIssues(self, projectList):
+    def persistIssues(self, projectList, startdate=None, enddate=None):
         """Replace the DB data with fresh data"""
+        startDate = pytz.utc.localize(
+            datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
+        endDate = pytz.utc.localize(
+            datetime(MAXYEAR, 1, 1) if enddate is None else datetime.strptime(enddate, DATE_FORMAT))
         excludedProjects = []
         for project in projectList:
             # Find out when the apache project repo was created
@@ -397,7 +396,7 @@ class JIRADB(object):
             scanStartTime = time.time()
             try:
                 JQLQuery = 'project = "{0}" AND created < "{1}" AND (created > "{2}" OR resolved < "{1}")'\
-                    .format(project, self.endDate.strftime(JQL_TIME_FORMAT), self.startDate.strftime(JQL_TIME_FORMAT))
+                    .format(project, endDate.strftime(JQL_TIME_FORMAT), startDate.strftime(JQL_TIME_FORMAT))
                 log.debug('JQL Query: %s', JQLQuery)
                 issuePool = self.jira.search_issues(JQLQuery, maxResults=False, expand='changelog')
             except JIRAError:
@@ -410,8 +409,8 @@ class JIRADB(object):
             gitDB = self.getGitDB(project)
 
             # Verify that there are enough commits
-            if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > self.startDate.strftime(CVSANALY_TIME_FORMAT),
-                                                     gitDB.log.c.author_date < self.endDate.strftime(CVSANALY_TIME_FORMAT)).count() < MIN_COMMITS:
+            if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > startDate.strftime(CVSANALY_TIME_FORMAT),
+                                                     gitDB.log.c.author_date < endDate.strftime(CVSANALY_TIME_FORMAT)).count() < MIN_COMMITS:
                 log.warning('Project %s had less than %s commits in the given time window and will be excluded', project, MIN_COMMITS)
                 excludedProjects.append(project)
                 continue
@@ -420,7 +419,7 @@ class JIRADB(object):
             for issue in issuePool:
                 # Check if issue was created in the specified time window
                 creationDate = datetime.strptime(issue.fields.created, JIRA_DATE_FORMAT)
-                if self.endDate is not None and creationDate > self.endDate:
+                if endDate is not None and creationDate > endDate:
                     log.debug(
                         'Issue %s created on %s has a creation date after the specified time window and will be skipped.',
                         issue.key, issue.fields.created)
@@ -435,7 +434,7 @@ class JIRADB(object):
                 for event in issue.changelog.histories:
                     for item in event.items:
                         eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
-                        if isResolved and item.field == 'status' and item.toString == 'Resolved' and eventDate > self.startDate and eventDate < self.endDate:
+                        if isResolved and item.field == 'status' and item.toString == 'Resolved' and eventDate > startDate and eventDate < endDate:
                             # Get most recent resolver in this time window
                             try:
                                 resolverJiraObject = event.author
@@ -447,19 +446,19 @@ class JIRADB(object):
                             foundOriginalPriority = True
                 # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported
                 # outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
-                if resolverJiraObject is not None or creationDate > self.startDate:
+                if resolverJiraObject is not None or creationDate > startDate:
                     # This issue was reported and/or resolved in the window
                     reporterAccountProject = None
-                    if creationDate > self.startDate:
+                    if creationDate > startDate:
                         if issue.fields.reporter is None:
                             log.warning('Issue %s was reported by an anonymous user', issue.key)
                         else:
                             reporterAccountProject = self.persistContributor(issue.fields.reporter, project, "jira",
-                                                                             gitDB)
+                                                                             gitDB, startDate, endDate)
                             reporterAccountProject.issuesReported += 1
                     resolverAccountProject = None
                     if resolverJiraObject is not None:
-                        resolverAccountProject = self.persistContributor(resolverJiraObject, project, "jira", gitDB)
+                        resolverAccountProject = self.persistContributor(resolverJiraObject, project, "jira", gitDB, startDate, endDate)
                         resolverAccountProject.issuesResolved += 1
 
                     # Persist issue
@@ -476,7 +475,7 @@ class JIRADB(object):
             rows = gitDB.session.query(gitDB.people, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
                                                                                        gitDB.people.c.email == self.ghtorrentusers.c.email)
             for row in rows:
-                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git", gitDB)
+                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git", gitDB, startDate, endDate)
 
             for issue in issuePool:
                 for event in issue.changelog.histories:
@@ -494,7 +493,7 @@ class JIRADB(object):
                             if len(contributorAccountList) == 1:
                                 # Increment assignments from this account to the assignee account
                                 # TODO: possible that event.author could raise AtrributeError if author is anonymous?
-                                assignerAccountProject = self.persistContributor(event.author, project, "jira", gitDB)
+                                assignerAccountProject = self.persistContributor(event.author, project, "jira", gitDB, startDate, endDate)
                                 assigneeAccount = contributorAccountList[0]
                                 issueAssignment = self.session.query(IssueAssignment).filter(
                                     IssueAssignment.project == project,
@@ -507,7 +506,7 @@ class JIRADB(object):
                                                                       count=0, countInWindow=0)
                                 # Increment count of times this assigner assigned to this assignee
                                 issueAssignment.count += 1
-                                if eventDate > self.startDate and eventDate < self.endDate:
+                                if eventDate > startDate and eventDate < endDate:
                                     # Increment count of times this assigner assigned to this assignee within the window
                                     issueAssignment.countInWindow += 1
                                 self.session.add(issueAssignment)
@@ -537,7 +536,7 @@ class JIRADB(object):
             log.error("Connection error while querying GitHub rate limit. Retrying...")
             self.waitForRateLimit(resourceType)
 
-    def persistContributor(self, person, project, service, gitDB):
+    def persistContributor(self, person, project, service, gitDB, startDate, endDate):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         contributorEmail = person.emailAddress
         # Convert email format to standard format
@@ -757,7 +756,7 @@ class JIRADB(object):
                 rows = gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_id == row.id)
                 for row in rows:
                     dt = pytz.utc.localize(row.author_date)  # datetime object
-                    if dt > self.startDate and dt < self.endDate:
+                    if dt > startDate and dt < endDate:
                         # Was this done during typical business hours?
                         if dt.hour > 10 and dt.hour < 16:
                             BHCommitCount += 1
