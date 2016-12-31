@@ -536,6 +536,15 @@ class JIRADB(object):
             log.error("Connection error while querying GitHub rate limit. Retrying...")
             self.waitForRateLimit(resourceType)
 
+    def getGithubUserForLogin(self, login):
+        """Uses the Github API to find the user for the given username. Returns NullObject if the user was not found for any reason."""
+        try:
+            potentialUser = self.gh.user(login)
+        except ConnectionError:
+            log.error("github query failed when attempting to verify username %s", login)
+            potentialUser = NullObject()
+        return self.refreshGithubUser(potentialUser)
+
     def persistContributor(self, person, project, service, gitDB, startDate, endDate):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         contributorEmail = person.emailAddress
@@ -575,14 +584,10 @@ class JIRADB(object):
                 rows = self.ghusersextendedsession.query(self.emailGHLoginTable).filter(
                     self.emailGHLoginTable.c.email == contributorEmail)
                 for ghAccount in rows:
-                    try:
-                        potentialUser = self.gh.user(ghAccount.login)
-                    except ConnectionError:
-                        log.error("github query failed when attempting to verify username %s", ghAccount.login)
-                        potentialUser = NullObject()
+                    potentialUser = self.getGithubUserForLogin(ghAccount.login)
                     if not isinstance(potentialUser, NullObject):
                         # valid GitHub username
-                        ghMatchedUser = self.refreshGithubUser(potentialUser)
+                        ghMatchedUser = potentialUser
                         log.debug('Matched email %s to GitHub user %s', contributorEmail, ghMatchedUser.name)
                         break
 
