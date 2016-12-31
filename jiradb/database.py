@@ -183,10 +183,10 @@ class JIRADB(object):
         ghtorrentschema = SCHEMA_REGEX.search(ghtorrentdbstring).group(1)
         ghtTable = TableReflector(ghtorrentengine, ghtorrentschema, ghtorrentmetadata)
         # TODO: GHTorrent.org blocks SHOW CREATE TABLE, requiring workaround
-        self.ghtorrentusers = self.users = Table('users', ghtorrentmetadata,
+        self.ghtorrentusers = Table('users', ghtorrentmetadata,
                                                  Column('id', Integer, primary_key=True),
                                                  Column('login', VARCHAR(255)),
-                                                 Column('name', VARCHAR(255)),
+                                                 Column('type', VARCHAR(255)),
                                                  schema=ghtorrentschema)
         self.ghtorrentprojects = ghtTable('projects')
         self.ghtorrentorganization_members = ghtTable('organization_members')
@@ -352,11 +352,12 @@ class JIRADB(object):
                 apacheProjectCreationDate = projectRepo.project_creation_date
 
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
-            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers, self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
-                self.ghtorrentusers.c.login, self.ghtorrentusers.c.name.label('company_name'),
-                self.ghtorrentusers.c.email).filter(self.ghtorrentusers.c.type == 'ORG',
-                                                    self.ghtorrentprojects.c.name == project,
-                                                    self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
+            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers,
+                                                                            self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
+                self.ghtorrentusers.c.login).filter(
+                self.ghtorrentusers.c.type == 'ORG',
+                self.ghtorrentprojects.c.name == project,
+                self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
                 asc(self.ghtorrentprojects.c.created_at))
             if rows.count() == 0:
                 log.error('Failed to find any pre-Apache repos for project %s', project)
@@ -366,14 +367,18 @@ class JIRADB(object):
                 # Store Company if not seen
                 if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
                     companyDomain = None
-                    if row.email is not None:
-                        companyDomainMatch = EMAIL_DOMAIN_REGEX.search(row.email)
-                        if companyDomainMatch is not None:
-                            companyDomain = companyDomainMatch.group(1)
-                    newCompany = Company(ghlogin=row.login, name=row.company_name, domain=companyDomain)
-                    self.session.add(newCompany)
-                    newCompanyProject = CompanyProject(company=newCompany, project=project)
-                    self.session.add(newCompanyProject)
+                    githubUser = self.getGithubUserForLogin(row.login)
+                    # Ignore any organization that cannot be found on live Github
+                    if not isinstance(githubUser, NullObject):
+                        companyEmail = githubUser.email
+                        if companyEmail is not None and not isinstance(companyEmail, NullObject):
+                            companyDomainMatch = EMAIL_DOMAIN_REGEX.search(companyEmail)
+                            if companyDomainMatch is not None:
+                                companyDomain = companyDomainMatch.group(1)
+                        newCompany = Company(ghlogin=row.login, name=githubUser.name, domain=companyDomain)
+                        self.session.add(newCompany)
+                        newCompanyProject = CompanyProject(company=newCompany, project=project)
+                        self.session.add(newCompanyProject)
 
             # Delete existing entries for this project related to contribution activity
             for table in [Issue, IssueAssignment, AccountProject, EmailProjectCommitCount]:
