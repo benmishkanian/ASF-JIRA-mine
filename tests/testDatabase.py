@@ -14,7 +14,7 @@ class TestDatabase(unittest.TestCase):
         self.jiradb = JIRADB("mysql+mysqlconnector://ght:@127.0.0.1:3307/ghtorrent", '', '')
 
     def test_persistIssues(self):
-        self.jiradb.persistIssues([self.PROJECT_NAME])
+        self.jiradb.persistIssues([self.PROJECT_NAME], 'I:/temp/ASF_projects')
         self.assertTrue(self.jiradb.session.query(Issue).count() != 0)
 
 if __name__ == '__main__':

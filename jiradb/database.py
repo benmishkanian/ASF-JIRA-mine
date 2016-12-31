@@ -89,7 +89,7 @@ def TableReflector(engine, schema, metadata=None):
 
 
 class GitDB(object):
-    def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname):
+    def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname, gitCloningDir):
         self.projectLower = project.lower()
         schema = self.projectLower + '_git'
         self.engine = create_engine(
@@ -98,7 +98,9 @@ class GitDB(object):
             self.engine.connect()
         except ProgrammingError:
             log.info('Database %s not found. Attempting to clone project repo...', schema)
-            call(['git', 'clone', 'git@github.com:apache/' + self.projectLower + '.git'])
+            oldDir = os.curdir
+            os.chdir(gitCloningDir)
+            call(['git', 'clone', 'https://github.com/apache/' + self.projectLower + '.git'])
             os.chdir(self.projectLower)
             log.info('Creating database %s...', schema)
             call(['mysql', '-u', gitdbuser, '--password=' + gitdbpass, '-e',
@@ -106,7 +108,7 @@ class GitDB(object):
             log.info('Populating database %s using cvsanaly...', schema)
             call(['cvsanaly2', '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema,
                   '--db-hostname', gitdbhostname])
-            os.chdir(os.pardir)
+            os.chdir(oldDir)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         gitdbTable = TableReflector(self.engine, schema)
@@ -331,7 +333,7 @@ class JIRADB(object):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
 
-    def persistIssues(self, projectList, startdate=None, enddate=None):
+    def persistIssues(self, projectList, gitCloningDir=os.curdir, startdate=None, enddate=None):
         """Replace the DB data with fresh data"""
         startDate = pytz.utc.localize(
             datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
@@ -411,7 +413,7 @@ class JIRADB(object):
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
 
             # Get DB containing git data for this project
-            gitDB = self.getGitDB(project)
+            gitDB = self.getGitDB(project, gitCloningDir)
 
             # Verify that there are enough commits
             if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > startDate.strftime(CVSANALY_TIME_FORMAT),
@@ -525,8 +527,8 @@ class JIRADB(object):
         self.session.commit()
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
 
-    def getGitDB(self, project):
-        return GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname)
+    def getGitDB(self, project, gitCloningDir):
+        return GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname, gitCloningDir)
 
     def waitForRateLimit(self, resourceType):
         """resourceType can be 'search' or 'core'."""

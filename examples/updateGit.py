@@ -9,4 +9,4 @@ if __name__ == "__main__":
     jiradb = JIRADB(**args)
     projectList = args['projects']
     for project in projectList:
-        jiradb.getGitDB(project).update()
+        jiradb.getGitDB(project, os.curdir).update()
