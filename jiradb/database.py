@@ -26,6 +26,7 @@ from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
 from ._internal_utils import equalsIgnoreCase
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
+import mysql.connector
 
 EMAIL_GH_LOGIN_TABLE_NAME = 'ghusers_extended'
 
@@ -103,8 +104,11 @@ class GitDB(object):
             call(['git', 'clone', 'https://github.com/apache/' + self.projectLower + '.git'])
             os.chdir(self.projectLower)
             log.info('Creating database %s...', schema)
-            call(['mysql', '-u', gitdbuser, '--password=' + gitdbpass, '-e',
-                  'create database `' + schema + '`;'])
+            cnx = mysql.connector.connect(user=gitdbuser, password=gitdbpass, host=gitdbhostname)
+            cursor = cnx.cursor()
+            cursor.execute('CREATE DATABASE `' + schema + '`;')
+            cursor.close()
+            cnx.close()
             log.info('Populating database %s using cvsanaly...', schema)
             call(['cvsanaly2', '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema,
                   '--db-hostname', gitdbhostname])
