@@ -26,4 +26,5 @@ this cached data instead of downloading new data every time, use the command lin
 
 ### Using other databases
 By default, the scripts write to a local sqlite database **sqlite.db**. You can specify a custom database connection
-string with the **--dbstring** option. Note that you may need different databases for cvsanaly and GHTorrent.
+string with the **--dbstring** option. The proper formatting for this argument depends on your DBMS. [See this link for 
+documentation on the connection strings.](http://docs.sqlalchemy.org/en/latest/core/engines.html#database-urls)
