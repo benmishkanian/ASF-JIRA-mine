@@ -4,7 +4,10 @@ Mining JIRA and git for Apache projects to learn about contribution patterns
 ## Dependencies
 - Python 3.3
 - jira-python
+- pytz
 - cvsanaly
+  - NOTE: this software seems to not support Windows
+- mysql.connector
 - sqlalchemy
 - github3.py
 - pythonwhois

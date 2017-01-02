@@ -6,7 +6,7 @@ import re
 import time
 from datetime import datetime, MAXYEAR, MINYEAR
 from enum import Enum
-from subprocess import call
+from subprocess import call, check_call
 
 import pythonwhois
 import pytz
@@ -90,7 +90,16 @@ def TableReflector(engine, schema, metadata=None):
 
 
 class GitDB(object):
-    def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname, gitCloningDir):
+    def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname, gitCloningDir, cvsanalyPythonPath, cvsanalyPath):
+        """
+        :param project: The project whose git log should be parsed
+        :param gitdbuser: The username of the MySQL user that has privileges over cvsanaly databases
+        :param gitdbpass: The password of gitdbuser
+        :param gitdbhostname: The hostname of the MySQL server where gitdbuser resides
+        :param gitCloningDir: A directory to use for cloning the project
+        :param cvsanalyPythonPath: Path to the Python 2 interpreter that has cvsanaly installed
+        :param cvsanalyPath: Path to the cvsanaly2 script installed by cvsanaly's setup.py
+        """
         self.projectLower = project.lower()
         schema = self.projectLower + '_git'
         self.engine = create_engine(
@@ -110,8 +119,7 @@ class GitDB(object):
             cursor.close()
             cnx.close()
             log.info('Populating database %s using cvsanaly...', schema)
-            call(['cvsanaly2', '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema,
-                  '--db-hostname', gitdbhostname])
+            check_call([cvsanalyPythonPath, cvsanalyPath, '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema, '--db-hostname', gitdbhostname])
             os.chdir(oldDir)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
@@ -337,7 +345,7 @@ class JIRADB(object):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
 
-    def persistIssues(self, projectList, gitCloningDir=os.curdir, startdate=None, enddate=None):
+    def persistIssues(self, projectList, cvsanalyPythonPath, cvsanalyPath, gitCloningDir=os.curdir, startdate=None, enddate=None):
         """Replace the DB data with fresh data"""
         startDate = pytz.utc.localize(
             datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
@@ -417,7 +425,7 @@ class JIRADB(object):
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
 
             # Get DB containing git data for this project
-            gitDB = self.getGitDB(project, gitCloningDir)
+            gitDB = self.getGitDB(project, gitCloningDir, cvsanalyPythonPath, cvsanalyPath)
 
             # Verify that there are enough commits
             if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > startDate.strftime(CVSANALY_TIME_FORMAT),
@@ -531,8 +539,8 @@ class JIRADB(object):
         self.session.commit()
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
 
-    def getGitDB(self, project, gitCloningDir):
-        return GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname, gitCloningDir)
+    def getGitDB(self, project, gitCloningDir, cvsanalyPythonPath, cvsanalyPath):
+        return GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname, gitCloningDir, cvsanalyPythonPath, cvsanalyPath)
 
     def waitForRateLimit(self, resourceType):
         """resourceType can be 'search' or 'core'."""
