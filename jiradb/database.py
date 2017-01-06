@@ -685,12 +685,14 @@ class JIRADB(object):
                                                                                       project)).subquery(
                     'distinct_committers')
                 committerRows = self.ghtorrentsession.query(subq.c.committer_id.distinct(),
-                                                            self.ghtorrentusers.c.name).join(self.ghtorrentusers,
+                                                            self.ghtorrentusers.c.login).join(self.ghtorrentusers,
                                                                                              subq.alias(
                                                             'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
-                if person.displayName in [committer.name for committer in committerRows]:
-                    isRelatedProjectCommitter = True
-                    break
+                for committer in committerRows:
+                    potentialUser2 = self.getGithubUserForLogin(committer.login)
+                    if not isinstance(potentialUser2, NullObject) and potentialUser2.name == person.displayName:
+                        isRelatedProjectCommitter = True
+                        break
 
             # count (non)business hour commits
             # TODO: there could be multiple rows returned?
