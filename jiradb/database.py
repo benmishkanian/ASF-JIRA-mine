@@ -6,7 +6,6 @@ import re
 import time
 from datetime import datetime, MAXYEAR, MINYEAR
 from enum import Enum
-from subprocess import call, check_call
 
 import pythonwhois
 import pytz
@@ -18,15 +17,14 @@ from jira import JIRA
 from jira.exceptions import JIRAError
 from requests.exceptions import ConnectionError
 from sqlalchemy import MetaData, Table, Column, Integer, VARCHAR, create_engine, asc, func
-from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
 
 from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
+from jiradb.git import GitDB
 from ._internal_utils import equalsIgnoreCase
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
-import mysql.connector
 
 EMAIL_GH_LOGIN_TABLE_NAME = 'ghusers_extended'
 
@@ -87,73 +85,6 @@ def TableReflector(engine, schema, metadata=None):
         nonlocal engine, metadata, schema
         return Table(tableName, metadata, autoload_with=engine, schema=schema, include_columns=includedColumns)
     return reflectTable
-
-
-class GitDB(object):
-    def __init__(self, project, gitdbuser, gitdbpass, gitdbhostname, gitCloningDir, cvsanalyPythonPath, cvsanalyPath):
-        """
-        :param project: The project whose git log should be parsed
-        :param gitdbuser: The username of the MySQL user that has privileges over cvsanaly databases
-        :param gitdbpass: The password of gitdbuser
-        :param gitdbhostname: The hostname of the MySQL server where gitdbuser resides
-        :param gitCloningDir: A directory to use for cloning the project
-        :param cvsanalyPythonPath: Path to the Python 2 interpreter that has cvsanaly installed
-        :param cvsanalyPath: Path to the cvsanaly2 script installed by cvsanaly's setup.py
-        """
-        self.projectLower = project.lower()
-        schema = self.projectLower + '_git'
-        self.engine = create_engine(
-            'mysql+mysqlconnector://{}:{}@{}/{}'.format(gitdbuser, gitdbpass, gitdbhostname, schema))
-        try:
-            self.engine.connect()
-        except ProgrammingError:
-            log.info('Database %s not found. Attempting to clone project repo...', schema)
-            oldDir = os.curdir
-            os.chdir(gitCloningDir)
-            call(['git', 'clone', 'https://github.com/apache/' + self.projectLower + '.git'])
-            os.chdir(self.projectLower)
-            log.info('Creating database %s...', schema)
-            cnx = mysql.connector.connect(user=gitdbuser, password=gitdbpass, host=gitdbhostname)
-            cursor = cnx.cursor()
-            cursor.execute('CREATE DATABASE `' + schema + '`;')
-            cursor.close()
-            cnx.close()
-            log.info('Populating database %s using cvsanaly...', schema)
-            check_call([cvsanalyPythonPath, cvsanalyPath, '--db-user', gitdbuser, '--db-password', gitdbpass, '--db-database', schema, '--db-hostname', gitdbhostname])
-            os.chdir(oldDir)
-        Session = sessionmaker(bind=self.engine)
-        self.session = Session()
-        gitdbTable = TableReflector(self.engine, schema)
-        self.log = gitdbTable('scmlog')
-        self.people = gitdbTable('people')
-        self.gitdbuser = gitdbuser
-        self.gitdbpass = gitdbpass
-        self.schema = schema
-        self.gitdbhostname = gitdbhostname
-
-    def update(self):
-        self.session.close()
-        self.engine.dispose()
-        os.chdir(self.projectLower)
-        log.info('updating git log for project %s', self.projectLower)
-        call(['git', 'pull'])
-        log.info('repopulating git DB...')
-        call(['mysql', '-u', self.gitdbuser, '--password=' + self.gitdbpass, '-e',
-              'drop database `' + self.schema + '`;'])
-        call(['mysql', '-u', self.gitdbuser, '--password=' + self.gitdbpass, '-e',
-              'create database `' + self.schema + '`;'])
-        call(['cvsanaly2', '--db-user', self.gitdbuser, '--db-password', self.gitdbpass, '--db-database', self.schema,
-              '--db-hostname', self.gitdbhostname])
-        os.chdir(os.pardir)
-        log.info('reconnecting to git DB...')
-        self.engine = create_engine(
-            'mysql+mysqlconnector://{}:{}@{}/{}'.format(self.gitdbuser, self.gitdbpass, self.gitdbhostname, self.schema))
-        self.engine.connect()
-        Session = sessionmaker(bind=self.engine)
-        self.session = Session()
-        gitdbTable = TableReflector(self.engine, self.schema)
-        self.log = gitdbTable('scmlog')
-        self.people = gitdbTable('people')
 
 
 class JIRADB(object):
@@ -425,7 +356,7 @@ class JIRADB(object):
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
 
             # Get DB containing git data for this project
-            gitDB = self.getGitDB(project, gitCloningDir, cvsanalyPythonPath, cvsanalyPath)
+            gitDB = GitDB(project, self.engine, Base.metadata, self.session, gitCloningDir)
 
             # Verify that there are enough commits
             if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > startDate.strftime(CVSANALY_TIME_FORMAT),
@@ -538,9 +469,6 @@ class JIRADB(object):
             log.info("Refreshed DB for project %s", project)
         self.session.commit()
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
-
-    def getGitDB(self, project, gitCloningDir, cvsanalyPythonPath, cvsanalyPath):
-        return GitDB(project, self.gitdbuser, self.gitdbpass, self.gitdbhostname, gitCloningDir, cvsanalyPythonPath, cvsanalyPath)
 
     def waitForRateLimit(self, resourceType):
         """resourceType can be 'search' or 'core'."""

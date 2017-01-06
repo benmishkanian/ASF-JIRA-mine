@@ -13,6 +13,7 @@ Mining JIRA and git for Apache projects to learn about contribution patterns
 - pythonwhois
 - requests
 - GHTorrent database
+- git
 
 ## Usage
 Run `jiradb.py <projects...>` to do a full analysis of the given projects and store the results in the database.
