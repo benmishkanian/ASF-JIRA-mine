@@ -36,8 +36,8 @@ class Contributor(Base):
     __table__ = Table('contributors', Base.metadata,
                       Column('id', Integer, primary_key=True),
                       Column('ghLogin', String(64), nullable=True),
-                      Column('ghProfileCompany', VARCHAR(), nullable=True),
-                      Column('ghProfileLocation', VARCHAR(), nullable=True)
+                      Column('ghProfileCompany', VARCHAR(200), nullable=True),
+                      Column('ghProfileLocation', VARCHAR(200), nullable=True)
                       )
 
 
@@ -49,7 +49,7 @@ class ContributorAccount(Base):
                       Column('service', String(8)),
                       Column('displayName', String(64), nullable=True),
                       Column('email', String(64)),
-                      Column('domain', VARCHAR()),
+                      Column('domain', VARCHAR(200)),
                       Column('hasCommercialEmail', Boolean, nullable=True)
                       )
     contributor = relationship("Contributor")
@@ -91,16 +91,16 @@ class EmailProjectCommitCount(Base):
 
 class Company(Base):
     __table__ = Table('companies', Base.metadata,
-                      Column('ghlogin', VARCHAR(), primary_key=True),
-                      Column('name', VARCHAR(), nullable=True),
-                      Column('domain', VARCHAR(), nullable=True)
+                      Column('ghlogin', VARCHAR(200), primary_key=True),
+                      Column('name', VARCHAR(200), nullable=True),
+                      Column('domain', VARCHAR(200), nullable=True)
                       )
 
 
 class CompanyProject(Base):
     __table__ = Table('companyprojects', Base.metadata,
-                      Column('company_ghlogin', VARCHAR(), ForeignKey("companies.ghlogin"), primary_key=True),
-                      Column('project', VARCHAR(), nullable=False)
+                      Column('company_ghlogin', VARCHAR(200), ForeignKey("companies.ghlogin"), primary_key=True),
+                      Column('project', VARCHAR(200), nullable=False)
                       )
     company = relationship("Company")
 
@@ -109,7 +109,7 @@ class ContributorOrganization(Base):
     __table__ = Table('contributororganizations', Base.metadata,
                       Column('id', Integer, primary_key=True),
                       Column('contributors_id', Integer, ForeignKey("contributors.id"), nullable=False),
-                      Column('githuborganizations_id', VARCHAR(), ForeignKey("githuborganizations.login"), nullable=False)
+                      Column('githuborganizations_id', VARCHAR(200), ForeignKey("githuborganizations.login"), nullable=False)
                       )
     contributor = relationship("Contributor")
     githuborganization = relationship("GithubOrganization")
@@ -117,10 +117,10 @@ class ContributorOrganization(Base):
 
 class GithubOrganization(Base):
     __table__ = Table('githuborganizations', Base.metadata,
-                      Column('login', VARCHAR(), primary_key=True),
-                      Column('company', VARCHAR()),
-                      Column('email', VARCHAR()),
-                      Column('name', VARCHAR())
+                      Column('login', VARCHAR(200), primary_key=True),
+                      Column('company', VARCHAR(200)),
+                      Column('email', VARCHAR(200)),
+                      Column('name', VARCHAR(200))
                       )
 
 
@@ -142,8 +142,8 @@ class CompanyProjectEdge(Base):
 
 class WhoisCache(Base):
     __table__ = Table('whoiscache', Base.metadata,
-                      Column('domain', VARCHAR(), primary_key=True),
-                      Column('adminName', VARCHAR(), nullable=True),
-                      Column('adminEmail', VARCHAR(), nullable=True),
+                      Column('domain', VARCHAR(200), primary_key=True),
+                      Column('adminName', VARCHAR(200), nullable=True),
+                      Column('adminEmail', VARCHAR(200), nullable=True),
                       Column('error', Integer, nullable=False)
                       )

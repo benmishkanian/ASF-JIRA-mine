@@ -1,14 +1,15 @@
+import logging
 import os
 from subprocess import call
 
-import logging
 from git import Repo
 from sqlalchemy import Column
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
+from sqlalchemy import NVARCHAR
+from sqlalchemy import String
 from sqlalchemy import Table
-from sqlalchemy import VARCHAR
 from sqlalchemy import and_
 from sqlalchemy import create_engine
 from sqlalchemy import select
@@ -35,12 +36,12 @@ class GitDB(object):
                          )
         self.people = Table(peopleTableName, metadata,
                             Column('id', Integer, primary_key=True),
-                            Column('email', VARCHAR()),
-                            Column('name', VARCHAR())
+                            Column('email', String(200)),
+                            Column('name', String(200))
                             )
         # create table if not exists
-        self.log.create(engine, checkfirst=True)
         self.people.create(engine, checkfirst=True)
+        self.log.create(engine, checkfirst=True)
         # if no rows, load rows using git log
         rowCount = session.query(self.log).count()
         log.info('%d rows in table %s', rowCount, tableName)

@@ -5,6 +5,7 @@
 analyzePostgres.R
 domains.txt
 getEmployer.py
+arguments.py
 googlesearchkey.txt
 *.csv
 *.zip
