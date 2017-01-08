@@ -5,9 +5,13 @@ import logging
 from git import Repo
 from sqlalchemy import Column
 from sqlalchemy import DateTime
+from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import Table
+from sqlalchemy import VARCHAR
+from sqlalchemy import and_
 from sqlalchemy import create_engine
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 log = logging.getLogger(__name__)
@@ -23,12 +27,20 @@ class GitDB(object):
         """
         self.projectLower = project.lower()
         tableName = self.projectLower + '_git'
+        peopleTableName = tableName + '_people'
         self.log = Table(tableName, metadata,
                          Column('id', Integer, primary_key=True),
-                         Column('author_date', DateTime)
+                         Column('author_date', DateTime),
+                         Column('author_id', Integer, ForeignKey(peopleTableName + '.id'), nullable=False)
                          )
+        self.people = Table(peopleTableName, metadata,
+                            Column('id', Integer, primary_key=True),
+                            Column('email', VARCHAR()),
+                            Column('name', VARCHAR())
+                            )
         # create table if not exists
         self.log.create(engine, checkfirst=True)
+        self.people.create(engine, checkfirst=True)
         # if no rows, load rows using git log
         rowCount = session.query(self.log).count()
         log.info('%d rows in table %s', rowCount, tableName)
@@ -43,10 +55,18 @@ class GitDB(object):
             commits = list(repo.iter_commits('master'))
             conn = engine.connect()
             for commit in commits:
-                conn.execute(self.log.insert().values(author_date=commit.authored_datetime))
+                # persist user if not seen before
+                peopleRows = conn.execute(select([self.people]).where(and_(self.people.c.email == str(commit.author.email), self.people.c.name == str(commit.author.name))))
+                personRow = peopleRows.fetchone()
+                if personRow is None:
+                    insertionResult = conn.execute(self.people.insert().values(email=str(commit.author.email), name=str(commit.author.name)))
+                    personId = insertionResult.inserted_primary_key[0]
+                else:
+                    personId = personRow['id']
+                # persist commit
+                conn.execute(self.log.insert().values(author_date=commit.authored_datetime, author_id=personId))
             os.chdir(oldDir)
         self.session = session
-        # self.people = gitdbTable('people')
 
     def update(self):
         # TODO: method needs updating
