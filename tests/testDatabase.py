@@ -16,7 +16,7 @@ class TestDatabase(unittest.TestCase):
         self.jiradb = JIRADB(GHTORRENT_DB_STRING, GIT_DB_USER, GIT_DB_PASS, dbstring=DB_STRING, ghtoken=GH_TOKEN)
 
     def test_persistIssues(self):
-        self.jiradb.persistIssues([self.PROJECT_NAME], 'C:\\Python27\\python.exe', os.getenv('APPDATA') + '\\Python\\Python27\\site-packages\\cvsanaly2-2.1.0-py2.7.egg\\EGG-INFO\\scripts\\cvsanaly2', 'I:/temp/ASF_projects')
+        self.jiradb.persistIssues([self.PROJECT_NAME], 'I:/temp/ASF_projects')
         self.assertTrue(self.jiradb.session.query(Issue).count() != 0)
 
 if __name__ == '__main__':

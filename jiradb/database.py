@@ -276,7 +276,7 @@ class JIRADB(object):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
 
-    def persistIssues(self, projectList, cvsanalyPythonPath, cvsanalyPath, gitCloningDir=os.curdir, startdate=None, enddate=None):
+    def persistIssues(self, projectList, gitCloningDir=os.curdir, startdate=None, enddate=None):
         """Replace the DB data with fresh data"""
         startDate = pytz.utc.localize(
             datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
@@ -359,8 +359,8 @@ class JIRADB(object):
             gitDB = GitDB(project, self.engine, Base.metadata, self.session, gitCloningDir)
 
             # Verify that there are enough commits
-            if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > startDate.strftime(CVSANALY_TIME_FORMAT),
-                                                     gitDB.log.c.author_date < endDate.strftime(CVSANALY_TIME_FORMAT)).count() < MIN_COMMITS:
+            if gitDB.session.query(gitDB.log).filter(gitDB.log.c.author_date > startDate,
+                                                     gitDB.log.c.author_date < endDate).count() < MIN_COMMITS:
                 log.warning('Project %s had less than %s commits in the given time window and will be excluded', project, MIN_COMMITS)
                 excludedProjects.append(project)
                 continue
