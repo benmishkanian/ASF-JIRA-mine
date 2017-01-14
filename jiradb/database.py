@@ -26,6 +26,8 @@ from jiradb.git import GitDB
 from ._internal_utils import equalsIgnoreCase
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
 
+NO_USERNAME = '<N/A>'
+
 EMAIL_GH_LOGIN_TABLE_NAME = 'ghusers_extended'
 
 DATE_FORMAT = '%Y-%m-%d'
@@ -422,10 +424,9 @@ class JIRADB(object):
                     self.session.add(newIssue)
 
             log.info('Persisting git contributors...')
-            rows = gitDB.session.query(gitDB.people, self.ghtorrentusers.c.login).join(self.ghtorrentusers,
-                                                                                       gitDB.people.c.email == self.ghtorrentusers.c.email)
-            for row in rows:
-                self.persistContributor(MockPerson(row.login, row.name, row.email), project, "git", gitDB, startDate, endDate)
+            gitPeopleRows = gitDB.session.query(gitDB.people)
+            for row in gitPeopleRows:
+                self.persistContributor(MockPerson(None, row.name, row.email), project, "git", gitDB, startDate, endDate)
 
             for issue in issuePool:
                 for event in issue.changelog.histories:
@@ -492,8 +493,10 @@ class JIRADB(object):
             potentialUser = NullObject()
         return self.refreshGithubUser(potentialUser)
 
-    def persistContributor(self, person, project, service, gitDB, startDate, endDate):
+    def persistContributor(self, person: MockPerson, project, service, gitDB, startDate, endDate):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
+        if person.name is None:
+            log.info('No username is associated with email %s', person.emailAddress)
         contributorEmail = person.emailAddress
         # Convert email format to standard format
         contributorEmail = contributorEmail.replace(" dot ", ".").replace(" at ", "@")
@@ -501,16 +504,20 @@ class JIRADB(object):
             log.warning("Truncating the following email to 64 characters: %s", contributorEmail)
             contributorEmail = contributorEmail[:64]
         # Find out if there is a contributor with an account that has the same email or (the same username on the same service)
-        if contributorEmail == 'dev-null@apache.org':
+        if contributorEmail == 'dev-null@apache.org' and person.name is not None:
             # We can't match using this anonymous email. Check username and service only.
             contributor = self.session.query(Contributor).join(ContributorAccount).filter(
                 (ContributorAccount.username == person.name) & (
                     ContributorAccount.service == service)).first()
         else:
-            contributor = self.session.query(Contributor).join(ContributorAccount).filter(
-                (ContributorAccount.email == contributorEmail) | (
-                    (ContributorAccount.username == person.name) & (
-                        ContributorAccount.service == service))).first()
+            if person.name is None:
+                contributor = self.session.query(Contributor).join(ContributorAccount).filter(
+                    ContributorAccount.email == contributorEmail).first()
+            else:
+                contributor = self.session.query(Contributor).join(ContributorAccount).filter(
+                    (ContributorAccount.email == contributorEmail) | (
+                        (ContributorAccount.username == person.name) & (
+                            ContributorAccount.service == service))).first()
 
         if contributor is None:
             # Match if there is an AccountProject with the same displayName and project
@@ -521,8 +528,9 @@ class JIRADB(object):
         # TODO: it may be good to rank matchings based on what matched (e.g. displayName-only match is low ranking)
 
         if contributor is None:
-            log.debug('Could not merge contributor given username %s, displayName %s, service %s, project %s. A new contributor object will be created.',
-                     person.name, person.displayName, service, project)
+            log.debug(
+                'Could not merge contributor given username %s, displayName %s, service %s, project %s. A new contributor object will be created.',
+                NO_USERNAME if person.name is None else person.name, person.displayName, service, project)
 
             # Try to get information from Github profile
             ghMatchedUser = None
@@ -545,7 +553,7 @@ class JIRADB(object):
                     # Too many results to scan through. Add full name to search.
                     userResults = self.searchGithubUsers(
                         contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
-                    if userResults.total_count > self.ghscanlimit:
+                    if userResults.total_count > self.ghscanlimit and person.name is not None:
                         # Still too many results. Add username to search.
                         userResults = self.searchGithubUsers(contributorEmail.split('@')[
                                                                0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
@@ -564,13 +572,14 @@ class JIRADB(object):
                             except StopIteration:
                                 break
                             except UnprocessableEntity as e:
-                                log.error("Aborting search for user %s due to GitHub API error: %s", person.name, e.message)
+                                log.error("Aborting search for user with email %s due to GitHub API error", person.emailAddress, exc_info=e)
                                 break
 
                 # Try matching based on email
                 matchGHUser(userResults, lambda ghUser, person: equalsIgnoreCase(ghUser.email, contributorEmail))
-                # Try matching based on username
-                matchGHUser(self.searchGithubUsers(person.name + ' in:login'), lambda ghUser, person: equalsIgnoreCase(ghUser.login, person.name))
+                if person.name is not None:
+                    # Try matching based on username
+                    matchGHUser(self.searchGithubUsers(person.name + ' in:login'), lambda ghUser, person: equalsIgnoreCase(ghUser.login, person.name))
                 # Try matching based on displayName
                 matchGHUser(self.searchGithubUsers(person.displayName + ' in:fullname'), lambda ghUser, person: equalsIgnoreCase(ghUser.name, person.displayName))
 
@@ -584,15 +593,16 @@ class JIRADB(object):
                 ghProfileCompany = ghMatchedUser.company
                 ghProfileLocation = ghMatchedUser.location
 
-            log.debug("New contributor %s %s %s", contributorEmail, person.name, person.displayName)
+            log.debug("New contributor (email=%s, login=%s, displayName=%s", contributorEmail, NO_USERNAME if person.name is None else person.name, person.displayName)
             contributor = Contributor(ghLogin=ghLogin,
                                       ghProfileCompany=ghProfileCompany,
                                       ghProfileLocation=ghProfileLocation)
             self.session.add(contributor)
 
         # Find out if this account is stored already
+        # TODO: evaluate whether the change to match email instead of username impacts results relative to v1.0
         contributorAccount = self.session.query(ContributorAccount).filter(
-            ContributorAccount.contributor == contributor, ContributorAccount.username == person.name,
+            ContributorAccount.contributor == contributor, ContributorAccount.username == person.emailAddress,
             ContributorAccount.service == service).first()
         if contributorAccount is None:
             # Persist new account
@@ -614,8 +624,8 @@ class JIRADB(object):
                 log.warning('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
                 usingPersonalEmail = None
 
-            log.debug("Adding new ContributorAccount for %s on %s", person.name, service)
-            contributorAccount = ContributorAccount(contributor=contributor, username=person.name, service=service,
+            log.debug("Adding new ContributorAccount for %s on %s", person.emailAddress, service)
+            contributorAccount = ContributorAccount(contributor=contributor, username=NO_USERNAME if person.name is None else person.name, service=service,
                                                     displayName=person.displayName, email=contributorEmail,
                                                     domain=domain, hasCommercialEmail=not usingPersonalEmail)
             self.session.add(contributorAccount)
