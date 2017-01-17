@@ -1,10 +1,9 @@
 import unittest
 
+from examples.logUtil import configureLogger
 from jiradb.database import JIRADB
 from jiradb.schema import Issue
-from examples.logUtil import configureLogger
-import os
-from arguments import GHTORRENT_DB_STRING, GIT_DB_USER, GIT_DB_PASS, DB_STRING, GH_TOKEN
+from tests.arguments import REPO_DOWNLOAD_DIR, GHTORRENT_DB_STRING, GIT_DB_USER, GIT_DB_PASS, DB_STRING, GH_TOKEN
 
 
 class TestDatabase(unittest.TestCase):
@@ -16,7 +15,7 @@ class TestDatabase(unittest.TestCase):
         self.jiradb = JIRADB(GHTORRENT_DB_STRING, GIT_DB_USER, GIT_DB_PASS, dbstring=DB_STRING, ghtoken=GH_TOKEN)
 
     def test_persistIssues(self):
-        self.jiradb.persistIssues([self.PROJECT_NAME], 'I:/temp/ASF_projects')
+        self.jiradb.persistIssues([self.PROJECT_NAME], REPO_DOWNLOAD_DIR)
         self.assertTrue(self.jiradb.session.query(Issue).count() != 0)
 
 if __name__ == '__main__':

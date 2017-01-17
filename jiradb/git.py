@@ -49,10 +49,11 @@ class GitDB(object):
             log.info('No rows in table %s. Attempting to clone project repo...', tableName)
             oldDir = os.curdir
             os.chdir(gitCloningDir)
-            call(['git', 'clone', 'https://github.com/apache/' + self.projectLower + '.git'])
-            log.info('Populating table %s using gitpython...', tableName)
             repo = Repo(self.projectLower)
+            if repo.bare:
+                repo = Repo.clone_from('https://github.com/apache/' + self.projectLower + '.git', self.projectLower)
             assert not repo.bare
+            log.info('Populating table %s using gitpython...', tableName)
             commits = list(repo.iter_commits('master'))
             conn = engine.connect()
             for commit in commits:

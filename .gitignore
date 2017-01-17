@@ -13,3 +13,4 @@ googlesearchkey.txt
 README.html
 *.db
 *.pyc
+.vagrant

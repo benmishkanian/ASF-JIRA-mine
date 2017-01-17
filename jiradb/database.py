@@ -124,8 +124,6 @@ class JIRADB(object):
 
         # DB connection for ghtorrent
         ghtorrentengine = create_engine(ghtorrentdbstring)
-        GHTorrentSession = sessionmaker(bind=ghtorrentengine)
-        self.ghtorrentsession = GHTorrentSession()
         ghtorrentmetadata = MetaData(ghtorrentengine)
         ghtorrentschema = SCHEMA_REGEX.search(ghtorrentdbstring).group(1)
         ghtTable = TableReflector(ghtorrentengine, ghtorrentschema, ghtorrentmetadata)
@@ -139,6 +137,8 @@ class JIRADB(object):
         self.ghtorrentorganization_members = ghtTable('organization_members')
         self.ghtorrentproject_commits = ghtTable('project_commits')
         self.ghtorrentcommits = ghtTable('commits')
+        GHTorrentSession = sessionmaker(bind=ghtorrentengine)
+        self.ghtorrentsession = GHTorrentSession()
 
         self.googleSearchEnabled = False
         if self.gkeyfile is not None:
@@ -281,7 +281,7 @@ class JIRADB(object):
     def persistIssues(self, projectList, gitCloningDir=os.curdir, startdate=None, enddate=None):
         """Replace the DB data with fresh data"""
         startDate = pytz.utc.localize(
-            datetime(MINYEAR, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
+            datetime(1000, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
         endDate = pytz.utc.localize(
             datetime(MAXYEAR, 1, 1) if enddate is None else datetime.strptime(enddate, DATE_FORMAT))
         excludedProjects = []
@@ -351,8 +351,8 @@ class JIRADB(object):
                     .format(project, endDate.strftime(JQL_TIME_FORMAT), startDate.strftime(JQL_TIME_FORMAT))
                 log.debug('JQL Query: %s', JQLQuery)
                 issuePool = self.jira.search_issues(JQLQuery, maxResults=False, expand='changelog')
-            except JIRAError:
-                log.error('Failed to find project %s on JIRA', project)
+            except JIRAError as e:
+                log.error('Failed to find project %s on JIRA', project, exc_info=e)
                 excludedProjects.append(project)
                 continue
             log.info('Parsed %d issues in %.2f seconds', len(issuePool), time.time() - scanStartTime)
@@ -428,6 +428,7 @@ class JIRADB(object):
             for row in gitPeopleRows:
                 self.persistContributor(MockPerson(None, row.name, row.email), project, "git", gitDB, startDate, endDate)
 
+            log.info('Persisting JIRA issue assignments...')
             for issue in issuePool:
                 for event in issue.changelog.histories:
                     eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
@@ -488,10 +489,12 @@ class JIRADB(object):
         """Uses the Github API to find the user for the given username. Returns NullObject if the user was not found for any reason."""
         try:
             potentialUser = self.gh.user(login)
+            if potentialUser is None:
+                return NullObject()
+            return self.refreshGithubUser(potentialUser)
         except ConnectionError:
             log.error("github query failed when attempting to verify username %s", login)
-            potentialUser = NullObject()
-        return self.refreshGithubUser(potentialUser)
+            return NullObject()
 
     def persistContributor(self, person: MockPerson, project, service, gitDB, startDate, endDate):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
@@ -529,13 +532,13 @@ class JIRADB(object):
 
         if contributor is None:
             log.debug(
-                'Could not merge contributor given username %s, displayName %s, service %s, project %s. A new contributor object will be created.',
+                'Adding a new contributor for username %s, displayName %s, service %s, project %s',
                 NO_USERNAME if person.name is None else person.name, person.displayName, service, project)
 
             # Try to get information from Github profile
             ghMatchedUser = None
             if self.emailGHLoginDBName is not None:
-                # Attempt to use offline GHTorrent db for a quick Github username match
+                # Attempt to use emailGHLogin table for a quick Github username match
                 rows = self.ghusersextendedsession.query(self.emailGHLoginTable).filter(
                     self.emailGHLoginTable.c.email == contributorEmail)
                 for ghAccount in rows:
@@ -593,11 +596,10 @@ class JIRADB(object):
                 ghProfileCompany = ghMatchedUser.company
                 ghProfileLocation = ghMatchedUser.location
 
-            log.debug("New contributor (email=%s, login=%s, displayName=%s", contributorEmail, NO_USERNAME if person.name is None else person.name, person.displayName)
-            contributor = Contributor(ghLogin=ghLogin,
-                                      ghProfileCompany=ghProfileCompany,
+            contributor = Contributor(ghLogin=ghLogin, ghProfileCompany=ghProfileCompany,
                                       ghProfileLocation=ghProfileLocation)
             self.session.add(contributor)
+            log.info("Added new contributor (email=%s, login=%s, displayName=%s)", contributorEmail, NO_USERNAME if person.name is None else person.name, person.displayName)
 
         # Find out if this account is stored already
         # TODO: evaluate whether the change to match email instead of username impacts results relative to v1.0

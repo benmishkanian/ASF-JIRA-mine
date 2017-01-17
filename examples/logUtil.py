@@ -12,10 +12,10 @@ def configureLogger(filePrefix):
     # Add file log handler
     fh = logging.FileHandler(filePrefix + '.log')
     fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
+    fh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s %(filename)s:%(lineno)d]: %(message)s'))
     log.addHandler(fh)
     # Add error file log handler
     efh = logging.FileHandler(filePrefix + 'Errors.log')
     efh.setLevel(logging.ERROR)
-    efh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s]: %(message)s'))
+    efh.setFormatter(logging.Formatter('[%(levelname)s @ %(asctime)s %(filename)s:%(lineno)d]: %(message)s'))
     log.addHandler(efh)
