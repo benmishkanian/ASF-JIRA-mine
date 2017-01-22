@@ -4,7 +4,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, MAXYEAR, MINYEAR
+from datetime import datetime, MAXYEAR
 from enum import Enum
 
 import pythonwhois
@@ -15,7 +15,6 @@ from github3.exceptions import UnprocessableEntity
 from github3.null import NullObject
 from jira import JIRA
 from jira.exceptions import JIRAError
-from requests.exceptions import ConnectionError
 from sqlalchemy import MetaData, Table, Column, Integer, VARCHAR, create_engine, asc, func
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
@@ -24,6 +23,7 @@ from jiradb.analysis import getTopContributors
 from jiradb.employer import getLikelyLinkedInEmployer
 from jiradb.git import GitDB
 from ._internal_utils import equalsIgnoreCase
+from .github import GitHubDB
 from .schema import Base, Issue, IssueAssignment, Contributor, ContributorAccount, AccountProject, ContributorCompany, EmailProjectCommitCount, Company, CompanyProject, ContributorOrganization, CompanyProjectEdge, WhoisCache, GoogleCache, GithubOrganization
 
 NO_USERNAME = '<N/A>'
@@ -165,6 +165,7 @@ class JIRADB(object):
         else:
             log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
+        self.githubDB = GitHubDB(self.gh)
         # Show interactive prompt(s) if credentials for git database are not provided
         if self.gitdbuser is None:
             self.gitdbuser = getpass.getuser()
@@ -259,14 +260,6 @@ class JIRADB(object):
             self.getLinkedInEmployer(account.displayName, project)
             time.sleep(delayBetweenQueries)
 
-    def searchGithubUsers(self, query):
-        self.waitForRateLimit('search')
-        return self.gh.search_users(query)
-
-    def refreshGithubUser(self, ghUserObject):
-        self.waitForRateLimit('core')
-        return ghUserObject.refresh(True)
-
     def deleteRows(self, table, *filterArgs):
         return self.session.query(table).filter(*filterArgs).delete(synchronize_session='fetch')
 
@@ -360,7 +353,7 @@ class JIRADB(object):
                 # Store Company if not seen
                 if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
                     companyDomain = None
-                    githubUser = self.getGithubUserForLogin(row.login)
+                    githubUser = self.githubDB.getGithubUserForLogin(row.login)
                     # Ignore any organization that cannot be found on live Github
                     if not isinstance(githubUser, NullObject):
                         companyEmail = githubUser.email
@@ -490,30 +483,6 @@ class JIRADB(object):
                                         issue.key,
                                         item.to)
 
-    def waitForRateLimit(self, resourceType):
-        """resourceType can be 'search' or 'core'."""
-        try:
-            rateLimitInfo = self.gh.rate_limit()['resources']
-            while rateLimitInfo[resourceType]['remaining'] < (1 if resourceType == 'search' else 12):
-                waitTime = max(1, rateLimitInfo[resourceType]['reset'] - time.time())
-                log.warning('Waiting %s seconds for Github rate limit...', waitTime)
-                time.sleep(waitTime)
-                rateLimitInfo = self.gh.rate_limit()['resources']
-        except ConnectionError as e:
-            log.error("Connection error while querying GitHub rate limit. Retrying...")
-            self.waitForRateLimit(resourceType)
-
-    def getGithubUserForLogin(self, login):
-        """Uses the Github API to find the user for the given username. Returns NullObject if the user was not found for any reason."""
-        try:
-            potentialUser = self.gh.user(login)
-            if potentialUser is None:
-                return NullObject()
-            return self.refreshGithubUser(potentialUser)
-        except ConnectionError:
-            log.error("github query failed when attempting to verify username %s", login)
-            return NullObject()
-
     def persistContributor(self, person: MockPerson, project, service, gitDB, startDate, endDate):
         """Persist the contributor to the DB unless they are already there. Returns the Contributor object."""
         if person.name is None:
@@ -560,7 +529,7 @@ class JIRADB(object):
                 rows = self.ghusersextendedsession.query(self.emailGHLoginTable).filter(
                     self.emailGHLoginTable.c.email == contributorEmail)
                 for ghAccount in rows:
-                    potentialUser = self.getGithubUserForLogin(ghAccount.login)
+                    potentialUser = self.githubDB.getGithubUserForLogin(ghAccount.login)
                     if not isinstance(potentialUser, NullObject):
                         # valid GitHub username
                         ghMatchedUser = potentialUser
@@ -569,14 +538,14 @@ class JIRADB(object):
 
             if ghMatchedUser is None:
                 # Search email prefix on github
-                userResults = self.searchGithubUsers(contributorEmail.split('@')[0] + ' in:email')
+                userResults = self.githubDB.searchGithubUsers(contributorEmail.split('@')[0] + ' in:email')
                 if userResults.total_count > self.ghscanlimit:
                     # Too many results to scan through. Add full name to search.
-                    userResults = self.searchGithubUsers(
+                    userResults = self.githubDB.searchGithubUsers(
                         contributorEmail.split('@')[0] + ' in:email ' + person.displayName + ' in:name')
                     if userResults.total_count > self.ghscanlimit and person.name is not None:
                         # Still too many results. Add username to search.
-                        userResults = self.searchGithubUsers(contributorEmail.split('@')[
+                        userResults = self.githubDB.searchGithubUsers(contributorEmail.split('@')[
                                                                0] + ' in:email ' + person.displayName + ' in:name ' + person.name + ' in:login')
 
                 def matchGHUser(userResults, verificationFunction):
@@ -587,7 +556,7 @@ class JIRADB(object):
                             try:
                                 ghUserResult = userResults.next()
                                 userIndex += 1
-                                ghUser = self.refreshGithubUser(ghUserResult.user)
+                                ghUser = self.githubDB.refreshGithubUser(ghUserResult.user)
                                 if verificationFunction(ghUser, person):
                                     ghMatchedUser = ghUser
                             except StopIteration:
@@ -600,9 +569,9 @@ class JIRADB(object):
                 matchGHUser(userResults, lambda ghUser, person: equalsIgnoreCase(ghUser.email, contributorEmail))
                 if person.name is not None:
                     # Try matching based on username
-                    matchGHUser(self.searchGithubUsers(person.name + ' in:login'), lambda ghUser, person: equalsIgnoreCase(ghUser.login, person.name))
+                    matchGHUser(self.githubDB.searchGithubUsers(person.name + ' in:login'), lambda ghUser, person: equalsIgnoreCase(ghUser.login, person.name))
                 # Try matching based on displayName
-                matchGHUser(self.searchGithubUsers(person.displayName + ' in:fullname'), lambda ghUser, person: equalsIgnoreCase(ghUser.name, person.displayName))
+                matchGHUser(self.githubDB.searchGithubUsers(person.displayName + ' in:fullname'), lambda ghUser, person: equalsIgnoreCase(ghUser.name, person.displayName))
 
             # TODO: assumes one github account per person
             if ghMatchedUser is None:
@@ -719,7 +688,7 @@ class JIRADB(object):
                                                                                              subq.alias(
                                                             'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
                 for committer in committerRows:
-                    potentialUser2 = self.getGithubUserForLogin(committer.login)
+                    potentialUser2 = self.githubDB.getGithubUserForLogin(committer.login)
                     if not isinstance(potentialUser2, NullObject) and potentialUser2.name == person.displayName:
                         isRelatedProjectCommitter = True
                         break
@@ -883,10 +852,10 @@ class JIRADB(object):
         # get fresh github user object
         potentialUser = self.gh.user(contributor.ghLogin)
         if not isinstance(potentialUser, NullObject):
-            ghUser = self.refreshGithubUser(potentialUser)
+            ghUser = self.githubDB.refreshGithubUser(potentialUser)
             organizations = ghUser.organizations()
             for organization in organizations:
-                org = self.refreshGithubUser(organization)
+                org = self.githubDB.refreshGithubUser(organization)
                 githubOrganization = self.session.query(GithubOrganization).filter(GithubOrganization.login == org.login).first()
                 if githubOrganization is None:
                     githubOrganization = GithubOrganization(login=org.login, company=org.company, email=org.email, name=org.name)
