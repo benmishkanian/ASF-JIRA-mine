@@ -422,11 +422,12 @@ class JIRADB(object):
                         originalPriority=originalPriority,
                         project=project)
                     self.session.add(newIssue)
-
+            self.session.commit()
             log.info('Persisting git contributors...')
             gitPeopleRows = gitDB.session.query(gitDB.people)
             for row in gitPeopleRows:
                 self.persistContributor(MockPerson(None, row.name, row.email), project, "git", gitDB, startDate, endDate)
+            self.session.commit()
 
             log.info('Persisting JIRA issue assignments...')
             for issue in issuePool:
@@ -466,7 +467,6 @@ class JIRADB(object):
                                 log.warning('%s assigned %s to unknown contributor %s. Ignoring.', event.author,
                                             issue.key,
                                             item.to)
-
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
         self.session.commit()
