@@ -278,7 +278,7 @@ class JIRADB(object):
         """childTableIDTuples should each be a tuple of the form (<childTableName>, <idColumn>)."""
         return self.deleteRows(table, *[self.hasNoChildren(table, childTuple[0], childTuple[1]) for childTuple in childTableIDTuples])
 
-    def persistIssues(self, projectList, gitCloningDir=os.curdir, startdate=None, enddate=None):
+    def populate(self, projectList, gitCloningDir=os.curdir, startdate=None, enddate=None):
         """Replace the DB data with fresh data"""
         startDate = pytz.utc.localize(
             datetime(1000, 1, 1) if startdate is None else datetime.strptime(startdate, DATE_FORMAT))
@@ -299,50 +299,12 @@ class JIRADB(object):
                 apacheProjectCreationDate = projectRepo.project_creation_date
 
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
-            rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers,
-                                                                            self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
-                self.ghtorrentusers.c.login).filter(
-                self.ghtorrentusers.c.type == 'ORG',
-                self.ghtorrentprojects.c.name == project,
-                self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
-                asc(self.ghtorrentprojects.c.created_at))
-            if rows.count() == 0:
+            if not self.persistRelatedGithubOrganizations(project, apacheProjectCreationDate):
                 log.error('Failed to find any pre-Apache repos for project %s', project)
                 excludedProjects.append(project)
                 continue
-            for row in rows:
-                # Store Company if not seen
-                if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
-                    companyDomain = None
-                    githubUser = self.getGithubUserForLogin(row.login)
-                    # Ignore any organization that cannot be found on live Github
-                    if not isinstance(githubUser, NullObject):
-                        companyEmail = githubUser.email
-                        if companyEmail is not None and not isinstance(companyEmail, NullObject):
-                            companyDomainMatch = EMAIL_DOMAIN_REGEX.search(companyEmail)
-                            if companyDomainMatch is not None:
-                                companyDomain = companyDomainMatch.group(1)
-                        newCompany = Company(ghlogin=row.login, name=githubUser.name, domain=companyDomain)
-                        self.session.add(newCompany)
-                        newCompanyProject = CompanyProject(company=newCompany, project=project)
-                        self.session.add(newCompanyProject)
 
-            # Delete existing entries for this project related to contribution activity
-            for table in [Issue, IssueAssignment, AccountProject, EmailProjectCommitCount]:
-                log.info("deleted %d entries for project %s",
-                         self.deleteRows(table, func.lower(table.project) == func.lower(project)), project)
-
-            # Delete accounts that have no projects and no issues and no issue assignments
-            log.info("deleted %d unused accounts", self.deleteUnusedEntries(ContributorAccount,
-                                                                            (AccountProject, AccountProject.contributoraccounts_id),
-                                                                            (Issue, Issue.reporter_id),
-                                                                            (Issue, Issue.resolver_id),
-                                                                            (IssueAssignment, IssueAssignment.assigner_id),
-                                                                            (IssueAssignment, IssueAssignment.assignee_id)))
-
-            # Delete contributors that have no accounts
-            log.info("deleted %d unused contributors", self.deleteUnusedEntries(Contributor,
-                                                                                (ContributorAccount, ContributorAccount.contributors_id)))
+            self.deleteOldData(project)
 
             log.info("Scanning project %s...", project)
             scanStartTime = time.time()
@@ -368,60 +330,7 @@ class JIRADB(object):
                 continue
 
             log.info("Persisting issues...")
-            for issue in issuePool:
-                # Check if issue was created in the specified time window
-                creationDate = datetime.strptime(issue.fields.created, JIRA_DATE_FORMAT)
-                if endDate is not None and creationDate > endDate:
-                    log.debug(
-                        'Issue %s created on %s has a creation date after the specified time window and will be skipped.',
-                        issue.key, issue.fields.created)
-                    continue
-                # Get current priority
-                currentPriority = issue.fields.priority.name if issue.fields.priority is not None else None
-                # Scan changelog
-                foundOriginalPriority = False
-                originalPriority = currentPriority
-                isResolved = issue.fields.status.name == 'Resolved'
-                resolverJiraObject = None
-                for event in issue.changelog.histories:
-                    for item in event.items:
-                        eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
-                        if isResolved and item.field == 'status' and item.toString == 'Resolved' and eventDate > startDate and eventDate < endDate:
-                            # Get most recent resolver in this time window
-                            try:
-                                resolverJiraObject = event.author
-                            except AttributeError:
-                                log.warning('Issue %s was resolved by an anonymous user', issue.key)
-                        elif not foundOriginalPriority and item.field == 'priority':
-                            # Get original priority
-                            originalPriority = item.fromString
-                            foundOriginalPriority = True
-                # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported
-                # outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
-                if resolverJiraObject is not None or creationDate > startDate:
-                    # This issue was reported and/or resolved in the window
-                    reporterAccountProject = None
-                    if creationDate > startDate:
-                        if issue.fields.reporter is None:
-                            log.warning('Issue %s was reported by an anonymous user', issue.key)
-                        else:
-                            reporterAccountProject = self.persistContributor(issue.fields.reporter, project, "jira",
-                                                                             gitDB, startDate, endDate)
-                            reporterAccountProject.issuesReported += 1
-                    resolverAccountProject = None
-                    if resolverJiraObject is not None:
-                        resolverAccountProject = self.persistContributor(resolverJiraObject, project, "jira", gitDB, startDate, endDate)
-                        resolverAccountProject.issuesResolved += 1
-
-                    # Persist issue
-                    newIssue = Issue(
-                        reporter=reporterAccountProject.account if reporterAccountProject is not None else None,
-                        resolver=resolverAccountProject.account if resolverAccountProject is not None else None,
-                        isResolved=isResolved,
-                        currentPriority=currentPriority,
-                        originalPriority=originalPriority,
-                        project=project)
-                    self.session.add(newIssue)
+            self.persistIssues(issuePool, gitDB, project, startDate, endDate)
             self.session.commit()
             log.info('Persisting git contributors...')
             gitPeopleRows = gitDB.session.query(gitDB.people)
@@ -430,47 +339,156 @@ class JIRADB(object):
             self.session.commit()
 
             log.info('Persisting JIRA issue assignments...')
-            for issue in issuePool:
-                for event in issue.changelog.histories:
-                    eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
-                    for item in event.items:
-                        # TODO: do we care when contributors clear the assignee field (i.e. item.to = None)?
-                        if item.field == 'assignee' and item.to is not None:
-                            # Check if the assignee is using a known account (may be same as assigner's account)
-                            contributorAccountList = [ca for ca in
-                                                      self.session.query(ContributorAccount).filter(
-                                                          ContributorAccount.service == "jira",
-                                                          ContributorAccount.username == item.to)]
-                            assert len(
-                                contributorAccountList) < 2, "Too many JIRA accounts returned for username " + item.to
-                            if len(contributorAccountList) == 1:
-                                # Increment assignments from this account to the assignee account
-                                # TODO: possible that event.author could raise AtrributeError if author is anonymous?
-                                assignerAccountProject = self.persistContributor(event.author, project, "jira", gitDB, startDate, endDate)
-                                assigneeAccount = contributorAccountList[0]
-                                issueAssignment = self.session.query(IssueAssignment).filter(
-                                    IssueAssignment.project == project,
-                                    IssueAssignment.assigner == assignerAccountProject.account,
-                                    IssueAssignment.assignee == assigneeAccount).first()
-                                if issueAssignment is None:
-                                    issueAssignment = IssueAssignment(project=project,
-                                                                      assigner=assignerAccountProject.account,
-                                                                      assignee=assigneeAccount,
-                                                                      count=0, countInWindow=0)
-                                # Increment count of times this assigner assigned to this assignee
-                                issueAssignment.count += 1
-                                if eventDate > startDate and eventDate < endDate:
-                                    # Increment count of times this assigner assigned to this assignee within the window
-                                    issueAssignment.countInWindow += 1
-                                self.session.add(issueAssignment)
-                            else:
-                                log.warning('%s assigned %s to unknown contributor %s. Ignoring.', event.author,
-                                            issue.key,
-                                            item.to)
+            self.persistIssueAssignments(issuePool, gitDB, project, startDate, endDate)
             self.session.commit()
             log.info("Refreshed DB for project %s", project)
         self.session.commit()
         log.info('Finished persisting projects. %s projects were excluded: %s', len(excludedProjects), excludedProjects)
+
+    def persistRelatedGithubOrganizations(self, project, apacheProjectCreationDate):
+        foundPotentialPredecessorProject = False
+        rows = self.ghtorrentsession.query(self.ghtorrentprojects).join(self.ghtorrentusers,
+                                                                        self.ghtorrentprojects.c.owner_id == self.ghtorrentusers.c.id).add_columns(
+            self.ghtorrentusers.c.login).filter(
+            self.ghtorrentusers.c.type == 'ORG',
+            self.ghtorrentprojects.c.name == project,
+            self.ghtorrentprojects.c.created_at < apacheProjectCreationDate).order_by(
+            asc(self.ghtorrentprojects.c.created_at))
+        if rows.count() != 0:
+            foundPotentialPredecessorProject = True
+            for row in rows:
+                # Store Company if not seen
+                if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
+                    companyDomain = None
+                    githubUser = self.getGithubUserForLogin(row.login)
+                    # Ignore any organization that cannot be found on live Github
+                    if not isinstance(githubUser, NullObject):
+                        companyEmail = githubUser.email
+                        if companyEmail is not None and not isinstance(companyEmail, NullObject):
+                            companyDomainMatch = EMAIL_DOMAIN_REGEX.search(companyEmail)
+                            if companyDomainMatch is not None:
+                                companyDomain = companyDomainMatch.group(1)
+                        newCompany = Company(ghlogin=row.login, name=githubUser.name, domain=companyDomain)
+                        self.session.add(newCompany)
+                        newCompanyProject = CompanyProject(company=newCompany, project=project)
+                        self.session.add(newCompanyProject)
+        return foundPotentialPredecessorProject
+
+    def deleteOldData(self, project):
+        # Delete existing entries for this project related to contribution activity
+        for table in [Issue, IssueAssignment, AccountProject, EmailProjectCommitCount]:
+            log.info("deleted %d entries for project %s",
+                     self.deleteRows(table, func.lower(table.project) == func.lower(project)), project)
+
+        # Delete accounts that have no projects and no issues and no issue assignments
+        log.info("deleted %d unused accounts", self.deleteUnusedEntries(ContributorAccount,
+                                                                        (AccountProject,
+                                                                         AccountProject.contributoraccounts_id),
+                                                                        (Issue, Issue.reporter_id),
+                                                                        (Issue, Issue.resolver_id),
+                                                                        (IssueAssignment, IssueAssignment.assigner_id),
+                                                                        (IssueAssignment, IssueAssignment.assignee_id)))
+        # Delete contributors that have no accounts
+        log.info("deleted %d unused contributors", self.deleteUnusedEntries(Contributor,
+                                                                            (ContributorAccount,
+                                                                             ContributorAccount.contributors_id)))
+
+    def persistIssues(self, issuePool, gitDB, project, startDate, endDate):
+        for issue in issuePool:
+            # Check if issue was created in the specified time window
+            creationDate = datetime.strptime(issue.fields.created, JIRA_DATE_FORMAT)
+            if endDate is not None and creationDate > endDate:
+                log.debug(
+                    'Issue %s created on %s has a creation date after the specified time window and will be skipped.',
+                    issue.key, issue.fields.created)
+                continue
+            # Get current priority
+            currentPriority = issue.fields.priority.name if issue.fields.priority is not None else None
+            # Scan changelog
+            foundOriginalPriority = False
+            originalPriority = currentPriority
+            isResolved = issue.fields.status.name == 'Resolved'
+            resolverJiraObject = None
+            for event in issue.changelog.histories:
+                for item in event.items:
+                    eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
+                    if isResolved and item.field == 'status' and item.toString == 'Resolved' and eventDate > startDate and eventDate < endDate:
+                        # Get most recent resolver in this time window
+                        try:
+                            resolverJiraObject = event.author
+                        except AttributeError:
+                            log.warning('Issue %s was resolved by an anonymous user', issue.key)
+                    elif not foundOriginalPriority and item.field == 'priority':
+                        # Get original priority
+                        originalPriority = item.fromString
+                        foundOriginalPriority = True
+            # XXX: We only persist issues that were reported or resolved in the window. If the issue was reported
+            # outside of the window, reporter is None, and if the issue was never resolved in the window, resolver is None.
+            if resolverJiraObject is not None or creationDate > startDate:
+                # This issue was reported and/or resolved in the window
+                reporterAccountProject = None
+                if creationDate > startDate:
+                    if issue.fields.reporter is None:
+                        log.warning('Issue %s was reported by an anonymous user', issue.key)
+                    else:
+                        reporterAccountProject = self.persistContributor(issue.fields.reporter, project, "jira",
+                                                                         gitDB, startDate, endDate)
+                        reporterAccountProject.issuesReported += 1
+                resolverAccountProject = None
+                if resolverJiraObject is not None:
+                    resolverAccountProject = self.persistContributor(resolverJiraObject, project, "jira", gitDB,
+                                                                     startDate, endDate)
+                    resolverAccountProject.issuesResolved += 1
+
+                # Persist issue
+                newIssue = Issue(
+                    reporter=reporterAccountProject.account if reporterAccountProject is not None else None,
+                    resolver=resolverAccountProject.account if resolverAccountProject is not None else None,
+                    isResolved=isResolved,
+                    currentPriority=currentPriority,
+                    originalPriority=originalPriority,
+                    project=project)
+                self.session.add(newIssue)
+
+    def persistIssueAssignments(self, issuePool, gitDB, project, startDate, endDate):
+        for issue in issuePool:
+            for event in issue.changelog.histories:
+                eventDate = datetime.strptime(event.created, JIRA_DATE_FORMAT)
+                for item in event.items:
+                    # TODO: do we care when contributors clear the assignee field (i.e. item.to = None)?
+                    if item.field == 'assignee' and item.to is not None:
+                        # Check if the assignee is using a known account (may be same as assigner's account)
+                        contributorAccountList = [ca for ca in
+                                                  self.session.query(ContributorAccount).filter(
+                                                      ContributorAccount.service == "jira",
+                                                      ContributorAccount.username == item.to)]
+                        assert len(
+                            contributorAccountList) < 2, "Too many JIRA accounts returned for username " + item.to
+                        if len(contributorAccountList) == 1:
+                            # Increment assignments from this account to the assignee account
+                            # TODO: possible that event.author could raise AtrributeError if author is anonymous?
+                            assignerAccountProject = self.persistContributor(event.author, project, "jira", gitDB,
+                                                                             startDate, endDate)
+                            assigneeAccount = contributorAccountList[0]
+                            issueAssignment = self.session.query(IssueAssignment).filter(
+                                IssueAssignment.project == project,
+                                IssueAssignment.assigner == assignerAccountProject.account,
+                                IssueAssignment.assignee == assigneeAccount).first()
+                            if issueAssignment is None:
+                                issueAssignment = IssueAssignment(project=project,
+                                                                  assigner=assignerAccountProject.account,
+                                                                  assignee=assigneeAccount,
+                                                                  count=0, countInWindow=0)
+                            # Increment count of times this assigner assigned to this assignee
+                            issueAssignment.count += 1
+                            if eventDate > startDate and eventDate < endDate:
+                                # Increment count of times this assigner assigned to this assignee within the window
+                                issueAssignment.countInWindow += 1
+                            self.session.add(issueAssignment)
+                        else:
+                            log.warning('%s assigned %s to unknown contributor %s. Ignoring.', event.author,
+                                        issue.key,
+                                        item.to)
 
     def waitForRateLimit(self, resourceType):
         """resourceType can be 'search' or 'core'."""

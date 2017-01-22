@@ -7,4 +7,4 @@ if __name__ == "__main__":
 
     args = getArguments()
     jiradb = JIRADB(**args)
-    jiradb.persistIssues(args['projects'], args['startdate'], args['enddate'])
+    jiradb.populate(args['projects'], args['startdate'], args['enddate'])

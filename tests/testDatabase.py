@@ -15,7 +15,7 @@ class TestDatabase(unittest.TestCase):
         self.jiradb = JIRADB(GHTORRENT_DB_STRING, GIT_DB_USER, GIT_DB_PASS, dbstring=DB_STRING, ghtoken=GH_TOKEN)
 
     def test_persistIssues(self):
-        self.jiradb.persistIssues([self.PROJECT_NAME], REPO_DOWNLOAD_DIR)
+        self.jiradb.populate([self.PROJECT_NAME], REPO_DOWNLOAD_DIR)
         self.assertTrue(self.jiradb.session.query(Issue).count() != 0)
 
 if __name__ == '__main__':
