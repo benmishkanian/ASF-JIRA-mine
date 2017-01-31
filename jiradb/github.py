@@ -3,6 +3,7 @@ import logging
 import time
 from github3.null import NullObject
 
+from .schema import GitHubUserCache
 
 log = logging.getLogger(__name__)
 
@@ -28,13 +29,24 @@ class GitHubDB(object):
         self.waitForRateLimit('core')
         return ghUserObject.refresh(True)
 
-    def getGithubUserForLogin(self, login):
+    def getGithubUserForLogin(self, login, session):
         """Uses the Github API to find the user for the given username. Returns NullObject if the user was not found for any reason."""
+        # Try to use cached result to avoid hitting rate limit
+        cachedUser = session.query(GitHubUserCache).filter(GitHubUserCache.login == login).first()
+        if cachedUser is not None:
+            return cachedUser if not cachedUser.fake else NullObject()
         try:
             potentialUser = self.gh.user(login)
             if potentialUser is None:
                 return NullObject()
-            return self.refreshGithubUser(potentialUser)
+            actualUser = self.refreshGithubUser(potentialUser)
+            if isinstance(potentialUser, NullObject):
+                # store login as fake
+                session.add(GitHubUserCache(login=login, fake=True))
+            else:
+                # cache user
+                session.add(GitHubUserCache(login=login, name=actualUser.name, email=actualUser.email, company=actualUser.company, location=actualUser.location))
+            return actualUser
         except ConnectionError:
             log.error("github query failed when attempting to verify username %s", login)
             return NullObject()

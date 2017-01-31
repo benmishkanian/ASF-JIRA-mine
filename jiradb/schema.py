@@ -140,10 +140,22 @@ class CompanyProjectEdge(Base):
                       Column('commits', Integer)
                       )
 
+
 class WhoisCache(Base):
     __table__ = Table('whoiscache', Base.metadata,
                       Column('domain', VARCHAR(200), primary_key=True),
                       Column('adminName', VARCHAR(200), nullable=True),
                       Column('adminEmail', VARCHAR(200), nullable=True),
                       Column('error', Integer, nullable=False)
+                      )
+
+
+class GitHubUserCache(Base):
+    __table__ = Table('githubusercache', Base.metadata,
+                      Column('login', VARCHAR(255), primary_key=True),
+                      Column('name', VARCHAR(255)),
+                      Column('email', VARCHAR(255)),
+                      Column('company', VARCHAR(255)),
+                      Column('location', VARCHAR(255)),
+                      Column('fake', Boolean, default=False)
                       )

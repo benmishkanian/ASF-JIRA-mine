@@ -5,7 +5,6 @@ import os
 import re
 import time
 from datetime import datetime, MAXYEAR
-from enum import Enum
 
 import pytz
 from apiclient.errors import HttpError
@@ -53,11 +52,6 @@ VOLUNTEER_DOMAINS = ["hotmail.com", "apache.org", "yahoo.com", "gmail.com", "aol
                      "mac.com", "icloud.com", "me.com", "yandex.com", "mail.com"]
 EMAIL_DOMAIN_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
 SCHEMA_REGEX = re.compile('.+/([^/?]+)\?*[^/]*')
-WHOIS_OBFUSCATORS = ["domainnameproxyservice.com", "whoisproxy.org", "1and1-private-registration.com",
-                     "proxy.dreamhost.com", "domainsbyproxy.com", "whoisprotectservice.com", "whoisguard.com",
-                     "whoisprivacyprotect.com", "contactprivacy.com", "privacyprotect.org", "privacyguardian.org",
-                     "domainprivacygroup.com", "privacy@1and1.com", "networksolutionsprivateregistration.com",
-                     "YinSiBaoHu.AliYun.com", "protecteddomainservices.com"]
 
 LINKEDIN_SEARCH_ID = '008656707069871259401:vpdorsx4z_o'
 
@@ -69,15 +63,6 @@ class MockPerson(object):
         self.name = username
         self.displayName = displayName
         self.emailAddress = emailAddress
-
-
-class WhoisError(Enum):
-    NO_ERR = 0
-    NO_CONTACT_INFO = 1
-    CONFIGURATION_ERR = 2
-    CONNECTION_RESET_ERR = 3
-    UNICODE_DECODE_ERR = 4
-    UNKNOWN_ERR = 5
 
 
 def TableReflector(engine, schema, metadata=None):
@@ -354,7 +339,7 @@ class JIRADB(object):
                 # Store Company if not seen
                 if self.session.query(Company).filter(Company.ghlogin == row.login).count() == 0:
                     companyDomain = None
-                    githubUser = self.githubDB.getGithubUserForLogin(row.login)
+                    githubUser = self.githubDB.getGithubUserForLogin(row.login, self.session)
                     # Ignore any organization that cannot be found on live Github
                     if not isinstance(githubUser, NullObject):
                         companyEmail = githubUser.email
@@ -530,7 +515,7 @@ class JIRADB(object):
                 rows = self.ghusersextendedsession.query(self.emailGHLoginTable).filter(
                     self.emailGHLoginTable.c.email == contributorEmail)
                 for ghAccount in rows:
-                    potentialUser = self.githubDB.getGithubUserForLogin(ghAccount.login)
+                    potentialUser = self.githubDB.getGithubUserForLogin(ghAccount.login, self.session)
                     if not isinstance(potentialUser, NullObject):
                         # valid GitHub username
                         ghMatchedUser = potentialUser
@@ -689,7 +674,7 @@ class JIRADB(object):
                                                                                              subq.alias(
                                                             'distinct_committers').c.committer_id == self.ghtorrentusers.c.id)
                 for committer in committerRows:
-                    potentialUser2 = self.githubDB.getGithubUserForLogin(committer.login)
+                    potentialUser2 = self.githubDB.getGithubUserForLogin(committer.login, self.session)
                     if not isinstance(potentialUser2, NullObject) and potentialUser2.name == person.displayName:
                         isRelatedProjectCommitter = True
                         break

@@ -1,8 +1,12 @@
+import logging
+from enum import Enum
+
 import pythonwhois
 
 from ._internal_utils import equalsIgnoreCase
-from jiradb.database import WhoisError, log, WHOIS_OBFUSCATORS
-from jiradb.schema import WhoisCache
+from .schema import WhoisCache
+
+log = logging.getLogger(__name__)
 
 
 def isEmailDomainAdmin(session, contributorEmail, domain, contributorName):
@@ -74,3 +78,19 @@ def isEmailDomainAdmin(session, contributorEmail, domain, contributorName):
     else:
         usingPersonalEmail = None
     return usingPersonalEmail
+
+
+WHOIS_OBFUSCATORS = ["domainnameproxyservice.com", "whoisproxy.org", "1and1-private-registration.com",
+                     "proxy.dreamhost.com", "domainsbyproxy.com", "whoisprotectservice.com", "whoisguard.com",
+                     "whoisprivacyprotect.com", "contactprivacy.com", "privacyprotect.org", "privacyguardian.org",
+                     "domainprivacygroup.com", "privacy@1and1.com", "networksolutionsprivateregistration.com",
+                     "YinSiBaoHu.AliYun.com", "protecteddomainservices.com"]
+
+
+class WhoisError(Enum):
+    NO_ERR = 0
+    NO_CONTACT_INFO = 1
+    CONFIGURATION_ERR = 2
+    CONNECTION_RESET_ERR = 3
+    UNICODE_DECODE_ERR = 4
+    UNKNOWN_ERR = 5
