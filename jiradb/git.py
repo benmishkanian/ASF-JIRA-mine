@@ -68,6 +68,7 @@ class GitDB(object):
                 # persist commit
                 conn.execute(self.log.insert().values(author_date=commit.authored_datetime, author_id=personId))
             os.chdir(oldDir)
+            session.commit()
         self.session = session
 
     def update(self):

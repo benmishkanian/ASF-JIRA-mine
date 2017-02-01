@@ -35,9 +35,13 @@ class GitHubDB(object):
         cachedUser = session.query(GitHubUserCache).filter(GitHubUserCache.login == login).first()
         if cachedUser is not None:
             return cachedUser if not cachedUser.fake else NullObject()
+        log.debug('Querying GutHub API for login %s', login)
         try:
+            self.waitForRateLimit('core')
             potentialUser = self.gh.user(login)
             if potentialUser is None:
+                # store login as fake
+                session.add(GitHubUserCache(login=login, fake=True))
                 return NullObject()
             actualUser = self.refreshGithubUser(potentialUser)
             if isinstance(potentialUser, NullObject):

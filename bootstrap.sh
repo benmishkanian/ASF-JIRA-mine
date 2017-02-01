@@ -5,8 +5,9 @@ sudo apt-get -y install git
 sudo debconf-set-selections <<< 'mysql-server mysql-server/root_password password'
 sudo debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password'
 sudo apt-get -y install mysql-server
+sudo cp /vagrant/collation.cnf /etc/mysql/conf.d/
 sudo mysqld &
-mysql -u root -e "create database helix_git"
+mysql -u root -e "create database helix_git CHARACTER SET utf8 COLLATE utf8_unicode_ci"
 mysqladmin -u root shutdown
 wget http://dev.mysql.com/get/Downloads/Connector-Python/mysql-connector-python-2.0.5.tar.gz
 tar -zxf mysql-connector-python-2.0.5.tar.gz
