@@ -480,11 +480,15 @@ class JIRADB(object):
             log.warning("Truncating the following email to 64 characters: %s", contributorEmail)
             contributorEmail = contributorEmail[:64]
         # Find out if there is a contributor with an account that has the same email or (the same username on the same service)
-        if contributorEmail == 'dev-null@apache.org' and person.name is not None:
-            # We can't match using this anonymous email. Check username and service only.
-            contributor = self.session.query(Contributor).join(ContributorAccount).filter(
-                (ContributorAccount.username == person.name) & (
-                    ContributorAccount.service == service)).first()
+        if contributorEmail == 'dev-null@apache.org':
+            if person.name is not None:
+                # We can't match using this anonymous email. Check username and service only.
+                contributor = self.session.query(Contributor).join(ContributorAccount).filter(
+                    (ContributorAccount.username == person.name) & (
+                        ContributorAccount.service == service)).first()
+            else:
+                log.warning('Git contributor using anonymous email will be matched based on display name %s', person.displayName)
+                contributor = None
         else:
             if person.name is None:
                 contributor = self.session.query(Contributor).join(ContributorAccount).filter(
@@ -577,8 +581,8 @@ class JIRADB(object):
         # Find out if this account is stored already
         # TODO: evaluate whether the change to match email instead of username impacts results relative to v1.0
         contributorAccount = self.session.query(ContributorAccount).filter(
-            ContributorAccount.contributor == contributor, ContributorAccount.username == person.emailAddress,
-            ContributorAccount.service == service).first()
+            ContributorAccount.contributor == contributor, ContributorAccount.email == person.emailAddress,
+            ContributorAccount.service == service).one_or_none()
         if contributorAccount is None:
             # Persist new account
 
