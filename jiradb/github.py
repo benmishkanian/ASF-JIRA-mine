@@ -1,6 +1,8 @@
 import logging
 
 import time
+
+from github3 import login, GitHub
 from github3.null import NullObject
 
 from .schema import GitHubUserCache
@@ -9,8 +11,13 @@ log = logging.getLogger(__name__)
 
 
 class GitHubDB(object):
-    def __init__(self, api):
-        self.gh = api
+    def __init__(self, ghtoken):
+        # Get handle to Github API
+        if ghtoken is not None and ghtoken != '':
+            self.gh = login(token=ghtoken)
+        else:
+            log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
+            self.gh = GitHub()
 
     def waitForRateLimit(self, resourceType):
         """resourceType can be 'search' or 'core'."""

@@ -8,7 +8,6 @@ from datetime import datetime, MAXYEAR
 
 import pytz
 from apiclient.errors import HttpError
-from github3 import GitHub, login
 from github3.exceptions import UnprocessableEntity
 from github3.null import NullObject
 from jira import JIRA
@@ -85,7 +84,6 @@ class JIRADB(object):
         """
         self.dbstring = dbstring
         self.gkeyfile = gkeyfile
-        self.ghtoken = ghtoken
         self.emailGHLoginDBName = emailGHLoginDBName
         self.ghscanlimit = ghscanlimit
         self.gitdbhostname = gitdbhostname
@@ -140,13 +138,7 @@ class JIRADB(object):
             GHUsersExtendedSession = sessionmaker(bind=ghusersextendeddbengine)
             self.ghusersextendedsession = GHUsersExtendedSession()
 
-        # Get handle to Github API
-        if self.ghtoken is not None and self.ghtoken != '':
-            self.gh = login(token=self.ghtoken)
-        else:
-            log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
-            self.gh = GitHub()
-        self.githubDB = GitHubDB(self.gh)
+        self.githubDB = GitHubDB(ghtoken)
 
     def buildContributorCompanyTable(self, projects, requiredCommitCoverage):
         for project in projects:
@@ -431,7 +423,7 @@ class JIRADB(object):
                                                   self.session.query(ContributorAccount).filter(
                                                       ContributorAccount.service == "jira",
                                                       ContributorAccount.username == item.to)]
-                        if contributorAccountList > 1:
+                        if len(contributorAccountList) > 1:
                             log.error('Too many JIRA accounts returned for username %s', item.to)
                             for ca in contributorAccountList:
                                 contributor = self.session.query(Contributor).filter(Contributor.id == ca.contributors_id).one_or_none()
@@ -763,7 +755,7 @@ class JIRADB(object):
 
     def persistOrganizations(self, contributor):
         # get fresh github user object
-        potentialUser = self.gh.user(contributor.ghLogin)
+        potentialUser = self.githubDB.gh.user(contributor.ghLogin)
         if not isinstance(potentialUser, NullObject):
             ghUser = self.githubDB.refreshGithubUser(potentialUser)
             organizations = ghUser.organizations()
