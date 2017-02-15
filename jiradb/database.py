@@ -77,22 +77,17 @@ def TableReflector(engine, schema, metadata=None):
 
 class JIRADB(object):
     # noinspection PyUnusedLocal
-    def __init__(self, ghtorrentdbstring, gitdbuser, gitdbpass, emailGHLoginDBName=None, ghtoken=None,
-                 dbstring='sqlite:///sqlite.db', gkeyfile=None, ghscanlimit=10,
-                 gitdbhostname='localhost', **unusedKwargs):
+    def __init__(self, ghtorrentdbstring, emailGHLoginDBName=None, ghtoken=None, dbstring='sqlite:///sqlite.db',
+                 gkeyfile=None, ghscanlimit=10, gitdbhostname='localhost', **unusedKwargs):
         """
         Initializes database connections/resources, and creates the necessary tables if they do not already exist.
 
-        :param gitdbuser: the username for a DBMS account that has access to cvsanaly databases (if None, shows interactive prompt)
-        :param gitdbpass: the password for gitdbuser (if None, shows interactive prompt)
         """
         self.dbstring = dbstring
         self.gkeyfile = gkeyfile
         self.ghtoken = ghtoken
         self.emailGHLoginDBName = emailGHLoginDBName
         self.ghscanlimit = ghscanlimit
-        self.gitdbuser = gitdbuser
-        self.gitdbpass = gitdbpass
         self.gitdbhostname = gitdbhostname
         self.jira = JIRA('https://issues.apache.org/jira')
 
@@ -152,11 +147,6 @@ class JIRADB(object):
             log.warning('Using unauthenticated access to Github API. This will result in severe rate limiting.')
             self.gh = GitHub()
         self.githubDB = GitHubDB(self.gh)
-        # Show interactive prompt(s) if credentials for git database are not provided
-        if self.gitdbuser is None:
-            self.gitdbuser = getpass.getuser()
-        if self.gitdbpass is None:
-            self.gitdbpass = getpass.getpass('Enter password for MySQL server containing cvsanaly dumps:')
 
     def buildContributorCompanyTable(self, projects, requiredCommitCoverage):
         for project in projects:
@@ -441,8 +431,12 @@ class JIRADB(object):
                                                   self.session.query(ContributorAccount).filter(
                                                       ContributorAccount.service == "jira",
                                                       ContributorAccount.username == item.to)]
-                        assert len(
-                            contributorAccountList) < 2, "Too many JIRA accounts returned for username " + item.to
+                        if contributorAccountList > 1:
+                            log.error('Too many JIRA accounts returned for username %s', item.to)
+                            for ca in contributorAccountList:
+                                contributor = self.session.query(Contributor).filter(Contributor.id == ca.contributors_id).one_or_none()
+                                log.error('ghLogin: %s; displayName: %s; email: %s', contributor.ghLogin, ca.displayName, ca.email)
+                                raise RuntimeError
                         if len(contributorAccountList) == 1:
                             # Increment assignments from this account to the assignee account
                             # TODO: possible that event.author could raise AtrributeError if author is anonymous?
@@ -623,7 +617,6 @@ class JIRADB(object):
             # TODO: check if '!=' does what I think it does
             rows = self.session.query(CompanyProject, Company.domain).join(Company).filter(
                 func.lower(CompanyProject.project) == func.lower(project), Company.domain != '')
-            log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedCompanyEmail = False
             for row in rows:
                 if contributorEmail.lower().endswith(row.domain.lower()):
@@ -633,7 +626,6 @@ class JIRADB(object):
             # Find out if they work at a company that is possibly contributing
             rows = self.session.query(CompanyProject, Company.name).join(Company).filter(
                 func.lower(CompanyProject.project) == func.lower(project), Company.name != '')
-            log.debug('%s rows from query %s', rows.count(), rows)
             hasRelatedEmployer = False
             for row in rows:
                 if contributor.ghProfileCompany is not None and row.name.lower() == contributor.ghProfileCompany.lower() or LinkedInEmployer is not None and row.name.lower() == LinkedInEmployer.lower():
