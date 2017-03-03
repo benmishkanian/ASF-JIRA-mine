@@ -13,6 +13,7 @@ from github3.null import NullObject
 from jira import JIRA
 from jira.exceptions import JIRAError
 from sqlalchemy import MetaData, Table, Column, Integer, VARCHAR, create_engine, asc, func
+from sqlalchemy.sql import exists
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import sessionmaker
 
@@ -428,7 +429,7 @@ class JIRADB(object):
                             for ca in contributorAccountList:
                                 contributor = self.session.query(Contributor).filter(Contributor.id == ca.contributors_id).one_or_none()
                                 log.error('ghLogin: %s; displayName: %s; email: %s', contributor.ghLogin, ca.displayName, ca.email)
-                                raise RuntimeError
+                            raise RuntimeError
                         if len(contributorAccountList) == 1:
                             # Increment assignments from this account to the assignee account
                             # TODO: possible that event.author could raise AtrributeError if author is anonymous?
@@ -567,7 +568,7 @@ class JIRADB(object):
         # Find out if this account is stored already
         # TODO: evaluate whether the change to match email instead of username impacts results relative to v1.0
         contributorAccount = self.session.query(ContributorAccount).filter(
-            ContributorAccount.contributor == contributor, ContributorAccount.email == person.emailAddress,
+            ContributorAccount.contributor == contributor, ContributorAccount.email == contributorEmail,
             ContributorAccount.service == service).one_or_none()
         if contributorAccount is None:
             # Persist new account
@@ -589,8 +590,10 @@ class JIRADB(object):
                 log.warning('Unable to parse domain in email %s. No assumption will be made about domain.', contributorEmail)
                 usingPersonalEmail = None
 
-            log.debug("Adding new ContributorAccount for %s on %s", person.emailAddress, service)
-            contributorAccount = ContributorAccount(contributor=contributor, username=NO_USERNAME if person.name is None else person.name, service=service,
+            log.debug("Adding new ContributorAccount (contributors_id=%s, email=%s, service=%s)", contributor.id, contributorEmail, service)
+            effectiveUsername = NO_USERNAME if person.name is None else person.name
+            assert not self.session.query(exists().where((ContributorAccount.service == 'jira') & (ContributorAccount.username == effectiveUsername))).scalar(), 'Attempted to add a duplicate ContributorAccount'
+            contributorAccount = ContributorAccount(contributor=contributor, username=effectiveUsername, service=service,
                                                     displayName=person.displayName, email=contributorEmail,
                                                     domain=domain, hasCommercialEmail=not usingPersonalEmail)
             self.session.add(contributorAccount)
@@ -598,7 +601,7 @@ class JIRADB(object):
         # Persist this AccountProject if not exits
         accountProject = self.session.query(AccountProject).filter(
             AccountProject.account == contributorAccount,
-            func.lower(AccountProject.project) == func.lower(project)).first()
+            func.lower(AccountProject.project) == func.lower(project)).one_or_none()
         if accountProject is None:
             # compute stats for this account on this project
 
@@ -710,7 +713,7 @@ class JIRADB(object):
     def getLinkedInEmployer(self, displayName, project):
         # Try to get LinkedIn information from the Google cache
         gCacheRow = self.session.query(GoogleCache).filter(GoogleCache.displayName == displayName,
-                                                           GoogleCache.project == project).first()
+                                                           GoogleCache.project == project).one_or_none()
         if gCacheRow is None and self.googleSearchEnabled:
             # Get LinkedIn page from Google Search
             searchResults = None
@@ -761,7 +764,7 @@ class JIRADB(object):
             organizations = ghUser.organizations()
             for organization in organizations:
                 org = self.githubDB.refreshGithubUser(organization)
-                githubOrganization = self.session.query(GithubOrganization).filter(GithubOrganization.login == org.login).first()
+                githubOrganization = self.session.query(GithubOrganization).filter(GithubOrganization.login == org.login).one_or_none()
                 if githubOrganization is None:
                     githubOrganization = GithubOrganization(login=org.login, company=org.company, email=org.email, name=org.name)
                     self.session.add(githubOrganization)
