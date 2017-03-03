@@ -72,6 +72,6 @@ Vagrant.configure("2") do |config|
   # SHELL
   config.vm.provision :shell, path: "bootstrap.sh"
   config.vm.provision :shell, inline: "sudo mysqld &", run: "always"
-  config.vm.provision :file, source: "~/.ssh/BenMBP15_id_rsa", destination: "~/.ssh/imported_id_rsa"
+  config.vm.provision :file, source: "~/.ssh/id_rsa", destination: "~/.ssh/imported_id_rsa"
   config.vm.provision :shell, path: "connectToGHTorrent.sh", run: "always"
 end
