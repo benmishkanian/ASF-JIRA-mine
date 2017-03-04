@@ -7,7 +7,6 @@ from sqlalchemy import Column
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
-from sqlalchemy import NVARCHAR
 from sqlalchemy import String
 from sqlalchemy import Table
 from sqlalchemy import and_
@@ -49,9 +48,11 @@ class GitDB(object):
             log.info('No rows in table %s. Attempting to clone project repo...', tableName)
             oldDir = os.curdir
             os.chdir(gitCloningDir)
-            repo = Repo(self.projectLower)
-            if repo.bare:
+            if not os.path.isdir(self.projectLower):
+                # Note: Receiving a 404 at this URL may result in an interactive login prompt
                 repo = Repo.clone_from('https://github.com/apache/' + self.projectLower + '.git', self.projectLower)
+            else:
+                repo = Repo(self.projectLower)
             assert not repo.bare
             log.info('Populating table %s using gitpython...', tableName)
             commits = list(repo.iter_commits('master'))

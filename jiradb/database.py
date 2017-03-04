@@ -7,6 +7,7 @@ import time
 from datetime import datetime, MAXYEAR
 
 import pytz
+import requests
 from apiclient.errors import HttpError
 from github3.exceptions import UnprocessableEntity
 from github3.null import NullObject
@@ -254,11 +255,17 @@ class JIRADB(object):
                 self.ghtorrentusers.c.login == 'apache',
                 self.ghtorrentprojects.c.name == project).first()
             if projectRepo is None:
-                log.error('Failed to find any Apache repos for project %s', project)
+                log.error('Failed to find any Apache repos for project %s on GHTorrent', project)
                 excludedProjects.append(project)
                 continue
             else:
                 apacheProjectCreationDate = projectRepo.project_creation_date
+
+            # Verify that the project is real, otherwise we will have problems when cloning the git repo
+            if requests.get('https://github.com/apache/' + project).status_code == 404:
+                log.error('No Apache repository named %s is currently live on GitHub', project)
+                excludedProjects.append(project)
+                continue
 
             log.info('Scanning ghtorrent to find out which companies may be working on this project...')
             if not self.persistRelatedGithubOrganizations(project, apacheProjectCreationDate):

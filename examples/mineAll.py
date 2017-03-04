@@ -1,27 +1,14 @@
-from sqlalchemy import create_engine, Table, MetaData
-import argparse
-from subprocess import call
+from examples.argumentParser import getArguments
+from examples.logUtil import configureLogger
+from jiradb.database import JIRADB
 
-from sqlalchemy.orm import sessionmaker
+if __name__ == "__main__":
+    configureLogger('mineAll')
 
-parser = argparse.ArgumentParser(description='Mine ASF project data.')
-parser.add_argument('--ghtorrentdbstring', action='store',
-                    help='The connection string for a ghtorrent database', required=True)
-ghtdb = parser.parse_args().ghtorrentdbstring
-
-engine = create_engine(ghtdb)
-Session = sessionmaker(bind=engine)
-session = Session()
-metadata = MetaData(engine)
-projects = Table('projects', metadata, autoload_with=engine)
-users = Table('users', metadata, autoload_with=engine)
-
-projectNames = [''.join(tuple) for tuple in
-                session.query(projects.c.name).join(users).filter('apache' == users.c.login).all()]
-
-with open('template.sh', 'r') as template:
-    fulltemplate = template.read()
-    cmd = fulltemplate[:-1] if fulltemplate.endswith('\n') else fulltemplate  # exclude \n
-    for projectName in projectNames:
-        call(['createdb', '-O', 'bmishkan', '-T', 'asfmine', projectName])
-        call(cmd.replace('<PROJECT_NAME>', projectName).split(' '))
+    args = getArguments()
+    jiradb = JIRADB(**args)
+    if args['projects'][0] == 'all':
+        args['projects'] = [''.join(resultTuple) for resultTuple in
+                         jiradb.ghtorrentsession.query(jiradb.ghtorrentprojects.c.name).join(
+                             jiradb.ghtorrentusers).filter('apache' == jiradb.ghtorrentusers.c.login).all()]
+    jiradb.populate(args['projects'])
